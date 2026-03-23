@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retirement Worksheet</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+        /* Hide the persistence script block from view */
+        #persisted-data { display: none; }
+        .pdf-label { font-size: 0.7rem; font-weight: 700; color: #4b5563; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pdf-input { border-bottom: 1px solid #d1d5db; border-radius: 0; padding-left: 0; }
+        .pdf-input:focus { border-bottom: 2px solid #2563eb; ring: 0; }
+        
+        @media print {
+            @page { size: letter landscape; margin: 0.25in; }
+            html, body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                background-color: white;
+                height: 100%;
+            }
+            .no-print { display: none !important; }
+            .shadow-xl { box-shadow: none !important; border: none !important; margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
+            .border-gray-400 { border: none !important; }
+            .print-border { border: 1px solid #e5e7eb !important; }
+        }
+
+        .summary-label { font-size: 0.65rem; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+        .summary-value { font-size: 0.9rem; font-weight: 600; color: #111827; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="root"></div>
+
+    <!-- PERSISTENCE STORE: Data is saved here as a JSON string -->
+    <script id="persisted-data" type="application/json"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons ---
+        const IconBase = ({ size = 20, children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        
+        const Plus = (props) => <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>;
+        const Trash2 = (props) => <IconBase {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>;
+        const User = (props) => <IconBase {...props}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
+        const ArrowLeft = (props) => <IconBase {...props}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></IconBase>;
+        const Save = (props) => <IconBase {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>;
+        const Printer = (props) => <IconBase {...props}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2-2h-2"/><rect x="6" y="14" width="12" height="8"/></IconBase>;
+        const Upload = (props) => <IconBase {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></IconBase>;
+
+        // --- Components ---
+        const InputField = ({ label, value, onChange, type = "text", readOnly = false, className = "", placeholder = "" }) => (
+          <div className={`flex flex-col ${className}`}>
+            <label className="pdf-label mb-1">{label}</label>
+            <input
+              type={type}
+              value={value}
+              onChange={onChange}
+              readOnly={readOnly}
+              placeholder={placeholder}
+              className={`w-full px-2 py-1 text-sm bg-transparent border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                readOnly ? "bg-gray-100 text-gray-600 cursor-not-allowed border-gray-200" : "bg-white text-gray-900"
+              }`}
+            />
+          </div>
+        );
+
+        const SelectField = ({ label, value, onChange, options, readOnly = false }) => (
+          <div className="flex flex-col">
+            <label className="pdf-label mb-1">{label}</label>
+            <select
+              value={value}
+              onChange={onChange}
+              disabled={readOnly}
+              className={`w-full px-2 py-1 text-sm bg-transparent border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                readOnly ? "bg-gray-100 text-gray-600 cursor-not-allowed" : "bg-white"
+              }`}
+            >
+              <option value="">Select...</option>
+              {options.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+        );
+
+        const SectionHeader = ({ title }) => (
+          <div className="bg-gray-200 text-gray-800 p-2 mt-6 mb-4 border-l-4 border-blue-800">
+            <h2 className="font-bold text-sm uppercase tracking-wide">{title}</h2>
+          </div>
+        );
+
+        const SummaryItem = ({ label, value, className = "" }) => (
+            <div className={`flex flex-col ${className}`}>
+                <span className="summary-label">{label}</span>
+                <span className="summary-value print:text-[13px] leading-snug">{value || '---'}</span>
+            </div>
+        );
+
+        // --- Core Helpers ---
+        const parseDateParts = (dateStr) => {
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            if (dateStr.includes('/')) {
+                const parts = dateStr.split('/');
+                return { y: parseInt(parts[2], 10), m: parseInt(parts[0], 10), d: parseInt(parts[1], 10) };
+            }
+            if (dateStr.includes('-')) {
+                const parts = dateStr.split('-');
+                return { y: parseInt(parts[0], 10), m: parseInt(parts[1], 10), d: parseInt(parts[2], 10) };
+            }
+            return null;
+        };
+
+        const maskSSN = (ssn) => {
+            if (!ssn) return '---';
+            const digits = ssn.replace(/\D/g, '');
+            if (digits.length <= 4) return digits; // Too short to mask
+            return `###-##-${digits.slice(-4)}`;
+        };
+
+        const formatSSN = (value) => {
+          if (!value) return '';
+          const digits = value.replace(/\D/g, '').slice(0, 9);
+          if (digits.length > 5) return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+          if (digits.length > 3) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+          return digits;
+        };
+
+        const parseDateToISO = (dateStr) => {
+            const p = parseDateParts(dateStr);
+            if (!p || isNaN(p.y) || isNaN(p.m) || isNaN(p.d)) return '';
+            return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+        };
+
+        const calculateAgeNumber = (birthDateStr, referenceDateStr) => {
+            const b = parseDateParts(birthDateStr);
+            const r = parseDateParts(referenceDateStr);
+            if (!b || !r || isNaN(b.y) || isNaN(r.y)) return '';
+            let age = r.y - b.y;
+            if (r.m < b.m || (r.m === b.m && r.d < b.d)) age--;
+            return Math.max(0, age).toString();
+        };
+
+        const calculate65thBirthday = (birthDate) => {
+            const p = parseDateParts(birthDate);
+            if (!p || isNaN(p.y)) return '';
+            return `${p.y + 65}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+        };
+
+        const calculateMedicareEligibleDate = (birthDate) => {
+            const p = parseDateParts(birthDate);
+            if (!p || isNaN(p.y)) return '';
+            let eligYear = p.y + 65, eligMonth = p.m, eligDay = 1;
+            if (p.d === 1) {
+                eligMonth = p.m - 1;
+                if (eligMonth === 0) { eligMonth = 12; eligYear -= 1; }
+            }
+            return `${eligYear}-${String(eligMonth).padStart(2, '0')}-${String(eligDay).padStart(2, '0')}`;
+        };
+
+        // Precise month calculation mirroring State logic
+        const calculateFullMonths = (startDateStr, endDateStr) => {
+            const s = parseDateParts(startDateStr);
+            const e = parseDateParts(endDateStr);
+            if (!s || !e || isNaN(s.y) || isNaN(e.y)) return 0;
+            
+            let months = (e.y - s.y) * 12;
+            months += (e.m - s.m);
+            // Floor the month count if we haven't reached the exact day
+            if (e.d < s.d) {
+                months--;
+            }
+            return Math.max(0, months);
+        };
+        
+        // Calculates exact month difference between two dates (ignoring specific days)
+        const diffMonths = (date1, date2) => {
+            const p1 = parseDateParts(date1);
+            const p2 = parseDateParts(date2);
+            if (!p1 || !p2) return 0;
+            return (p2.y - p1.y) * 12 + (p2.m - p1.m);
+        };
+
+        const getColumnValue = (row, key) => {
+            if (!row) return '';
+            const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === key.toLowerCase().trim());
+            return foundKey ? row[foundKey] : '';
+        };
+
+        const parseCSV = (text) => {
+          const lines = text.split('\n').filter(line => line.trim() !== '');
+          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+          return lines.slice(1).map(line => {
+            const values = [];
+            let currentValue = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') inQuotes = !inQuotes;
+              else if (char === ',' && !inQuotes) { values.push(currentValue.trim()); currentValue = ''; }
+              else { currentValue += char; }
+            }
+            values.push(currentValue.trim());
+            const entry = {};
+            headers.forEach((header, index) => { entry[header] = values[index]?.replace(/^"|"$/g, ''); });
+            return entry;
+          });
+        };
+
+        function App() {
+          const [view, setView] = useState('entry'); // 'entry' or 'summary'
+          const [employeeData, setEmployeeData] = useState([]);
+          const [isDataLoaded, setIsDataLoaded] = useState(false);
+          const [rawCsvContent, setRawCsvContent] = useState('');
+          const [fileHandle, setFileHandle] = useState(null);
+
+          const medicalPlanOptions = ["Traditional - Summit", "Traditional - Advantage", "Star - Summit", "Star - Advantage", "Consumer Plus - Summit", "Consumer Plus - Advantage"];
+          const medicalCoverageOptions = ["Self", "Self & Dependent", "Self + Family"];
+          const medicarePlanOptions = ["Medical Plan 100", "Medical Plan 75", "Medical Plan 50"];
+          const pharmacyPlanOptions = ["Enhanced Pharmacy Plan"];
+
+          const [formData, setFormData] = useState({
+            personnelNumber: '', employeeName: '', empSSN: '', eeGroup: 'Classified', spouseName: '',
+            declineCoverage: 'No', isDeathBenefit: 'No',
+            retirementDate: '', lastDayPaid: '', hireDate: '', birthDate: '',
+            payRate: '', ppEndDate: '', medPlan: '', medCoverage: '',
+            deptUnit: '', deptName: 'Department of Transportation', planEndDate: '',
+            coverageMonthsAtRetirement: '', employeeAgeRetirement: '', spouseAgeRetirement: '',
+            spouseSSN: '', spouseFirstName: '', spouseLastName: '', spouseBirthDate: '',
+            eeEarlyMedicare: 'No', spouseEarlyMedicare: 'No',
+            existingCoverageEndDate: '', extendedCoverageEndDate: '',
+            ee65thBirthday: '', spouse65thBirthday: '',
+            eeMedicareEligibleDate: '', spouseMedicareEligibleDate: '',
+            monthsToEEMedicare: '', monthsToSpouseMedicare: '', remainingCoverageMonths: '',
+            dependents: [{ id: 1, ssn: '', firstName: '', lastName: '', birthDate: '', age: '', disabled: 'No' }],
+            statePaidPEHPEndDate: '',
+            s4_ee_monthsUsed: '', s4_ee_beginDate: '', s4_ee_endDate: '', s4_ee_medPlan: '', s4_ee_medCoverage: '',
+            s4_sp_monthsUsed: '', s4_sp_beginDate: '', s4_sp_endDate: '', s4_sp_medPlan: '', s4_sp_medCoverage: '',
+            s5_ee_monthsUsed: '', s5_ee_beginDate: '', s5_ee_endDate: '', s5_ee_medPlan: '', s5_ee_medPharmacy: '',
+            s5_sp_monthsUsed: '', s5_sp_beginDate: '', s5_sp_endDate: '', s5_sp_medPlan: '', s5_sp_medPharmacy: '',
+          });
+
+          // Initialization
+          useEffect(() => {
+             const persisted = document.getElementById('persisted-data');
+             if (persisted && persisted.textContent.trim()) {
+                 try {
+                     const loadedData = JSON.parse(persisted.textContent);
+                     if (loadedData.csv) {
+                         const parsed = parseCSV(loadedData.csv);
+                         setEmployeeData(parsed);
+                         setRawCsvContent(loadedData.csv);
+                         setIsDataLoaded(true);
+                     }
+                     if (loadedData.formData) setFormData(loadedData.formData);
+                 } catch (e) { console.error("Error parsing embedded data", e); }
+             }
+          }, []);
+
+          const handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const text = event.target.result;
+              setRawCsvContent(text);
+              const parsed = parseCSV(text);
+              setEmployeeData(parsed);
+              setIsDataLoaded(true);
+            };
+            reader.readAsText(file);
+          };
+
+          const prepareDataBlob = () => {
+              const persistedElement = document.getElementById('persisted-data');
+              const dataToSave = { csv: rawCsvContent, formData: formData };
+              persistedElement.textContent = JSON.stringify(dataToSave);
+              const htmlContent = document.documentElement.outerHTML;
+              return new Blob([htmlContent], {type: 'text/html'});
+          };
+
+          const handleSaveAs = async () => {
+              const blob = prepareDataBlob();
+              try {
+                  if (window.showSaveFilePicker) {
+                      const handle = await window.showSaveFilePicker({ suggestedName: 'RetirementDraft.html', types: [{ description: 'HTML', accept: {'text/html': ['.html']} }] });
+                      setFileHandle(handle);
+                      const writable = await handle.createWritable();
+                      await writable.write(blob);
+                      await writable.close();
+                  } else {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url; a.download = 'RetirementDraft.html'; a.click();
+                  }
+              } catch (err) {}
+          };
+
+          const handleQuickSave = async () => {
+              if (fileHandle) {
+                  try {
+                      const writable = await fileHandle.createWritable();
+                      await writable.write(prepareDataBlob());
+                      await writable.close();
+                      alert("File saved successfully!");
+                  } catch (err) { handleSaveAs(); }
+              } else { handleSaveAs(); }
+          };
+
+          // Autofill CSV
+          useEffect(() => {
+            if (!formData.personnelNumber || employeeData.length === 0) return;
+            const employee = employeeData.find(e => getColumnValue(e, 'EIN') === formData.personnelNumber);
+            if (employee) {
+              const hp = getColumnValue(employee, 'Health Plan') || '';
+              const last = hp.slice(-1);
+              let cov = 'Unknown';
+              if (last === 'F') cov = 'Self + Family';
+              else if (last === '1') cov = 'Self';
+              else if (last === '2') cov = 'Self & Dependent';
+              
+              const hdate = parseDateToISO(getColumnValue(employee, 'formatted_service_date') || getColumnValue(employee, 'adjusted_service_date'));
+              const unit = getColumnValue(employee, 'Unit') ? `810 / ${getColumnValue(employee, 'Unit')}` : '';
+
+              setFormData(prev => ({
+                ...prev,
+                employeeName: getColumnValue(employee, 'Employee Name'),
+                hireDate: hdate,
+                payRate: getColumnValue(employee, 'Hourly Rate') || getColumnValue(employee, 'Pay Rate'),
+                medPlan: hp,
+                medCoverage: cov,
+                deptUnit: unit
+              }));
+            }
+          }, [formData.personnelNumber, employeeData]);
+
+          // Spouse Name Auto-Fill
+          useEffect(() => {
+              if (formData.spouseFirstName || formData.spouseLastName) {
+                  setFormData(prev => ({...prev, spouseName: `${formData.spouseFirstName} ${formData.spouseLastName}`.trim()}));
+              }
+          }, [formData.spouseFirstName, formData.spouseLastName]);
+
+          // Dates logic
+          useEffect(() => {
+            if (!formData.lastDayPaid) return;
+            const p = parseDateParts(formData.lastDayPaid);
+            if (!p) return;
+            
+            let ry = p.y, rm = p.m, rd = 16;
+            if (p.d > 15) { rd = 1; rm = p.m + 1; if (rm > 12) { rm = 1; ry = p.y + 1; } }
+            const retDate = `${ry}-${String(rm).padStart(2, '0')}-${String(rd).padStart(2, '0')}`;
+            
+            const refDate = new Date(2026, 0, 2, 12, 0, 0); // Noon Local to prevent timezone jump
+            const inputDate = new Date(p.y, p.m - 1, p.d, 12, 0, 0); 
+            const diffTime = inputDate.getTime() - refDate.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            const periods = Math.ceil(diffDays / 14);
+            const ppEndObj = new Date(refDate.getTime() + periods * 14 * 24 * 60 * 60 * 1000);
+            const ppDate = `${ppEndObj.getFullYear()}-${String(ppEndObj.getMonth() + 1).padStart(2, '0')}-${String(ppEndObj.getDate()).padStart(2, '0')}`;
+
+            setFormData(prev => ({ ...prev, retirementDate: retDate, ppEndDate: ppDate, planEndDate: ppDate }));
+          }, [formData.lastDayPaid]);
+
+          // Coverage Rules logic
+          useEffect(() => {
+              if (!formData.ppEndDate || !formData.hireDate) return;
+              let existing = formData.ppEndDate;
+              if (formData.hireDate <= '2003-02-15') {
+                  const p = parseDateParts(formData.ppEndDate);
+                  if (p) {
+                      const dObj = new Date(p.y, p.m - 1, p.d + 14);
+                      existing = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+                  }
+              }
+              const ageStr = calculateAgeNumber(formData.birthDate, formData.retirementDate);
+              const age = ageStr ? parseInt(ageStr, 10) : 0;
+              let extended = existing;
+              if (age >= 65 && existing) {
+                  const p = parseDateParts(existing);
+                  if (p && p.d !== 1) {
+                      const lastDay = new Date(p.y, p.m, 0);
+                      extended = `${p.y}-${String(p.m).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+                  }
+              }
+              
+              setFormData(prev => ({ 
+                  ...prev, 
+                  existingCoverageEndDate: existing, 
+                  extendedCoverageEndDate: extended
+              }));
+          }, [formData.ppEndDate, formData.hireDate, formData.birthDate, formData.retirementDate]);
+
+          // Age updates
+          useEffect(() => {
+            if (!formData.retirementDate) return;
+            const eeAge = calculateAgeNumber(formData.birthDate, formData.retirementDate);
+            const spAge = calculateAgeNumber(formData.spouseBirthDate, formData.retirementDate);
+            const deps = formData.dependents.map(d => ({ ...d, age: d.birthDate ? calculateAgeNumber(d.birthDate, formData.retirementDate) : d.age }));
+            
+            setFormData(prev => {
+                if (prev.employeeAgeRetirement === eeAge && prev.spouseAgeRetirement === spAge && JSON.stringify(prev.dependents) === JSON.stringify(deps)) {
+                    return prev;
+                }
+                return { ...prev, employeeAgeRetirement: eeAge, spouseAgeRetirement: spAge, dependents: deps };
+            });
+          }, [formData.birthDate, formData.spouseBirthDate, formData.retirementDate, formData.dependents]);
+
+          // Medicare & Sequential Distribution
+          useEffect(() => {
+            setFormData(prev => ({ ...prev, ee65thBirthday: calculate65thBirthday(formData.birthDate), spouse65thBirthday: calculate65thBirthday(formData.spouseBirthDate), eeMedicareEligibleDate: calculateMedicareEligibleDate(formData.birthDate), spouseMedicareEligibleDate: calculateMedicareEligibleDate(formData.spouseBirthDate) }));
+          }, [formData.birthDate, formData.spouseBirthDate]);
+
+          useEffect(() => {
+            const total = parseInt(formData.coverageMonthsAtRetirement || '0', 10);
+            const base = formData.existingCoverageEndDate;
+            const eeElig = formData.eeMedicareEligibleDate;
+            const spElig = formData.spouseMedicareEligibleDate;
+
+            // Base needed months exactly matching state logic 
+            let mEE = (base && eeElig && eeElig > base) ? diffMonths(base, eeElig) : 0;
+            let mSP = (base && spElig && spElig > base) ? diffMonths(base, spElig) : 0;
+
+            let rem = total;
+            
+            // 1. Employee Section 4
+            let aEE_s4 = Math.min(rem, mEE);
+            rem -= aEE_s4;
+
+            // 2. Spouse Section 4 (Starts sequentially AFTER Employee hits Medicare, or right away if EE is already on Medicare)
+            let spNeeded = Math.max(0, mSP - aEE_s4);
+            let aSP_s4 = Math.min(rem, spNeeded);
+            rem -= aSP_s4;
+
+            setFormData(prev => {
+                if (prev.monthsToEEMedicare === mEE && prev.monthsToSpouseMedicare === mSP && prev.s4_ee_monthsUsed === aEE_s4 && prev.s4_sp_monthsUsed === aSP_s4 && prev.remainingCoverageMonths === rem) {
+                    return prev;
+                }
+                return { ...prev, monthsToEEMedicare: mEE, monthsToSpouseMedicare: mSP, s4_ee_monthsUsed: aEE_s4, s4_sp_monthsUsed: aSP_s4, remainingCoverageMonths: rem };
+            });
+          }, [formData.coverageMonthsAtRetirement, formData.existingCoverageEndDate, formData.eeMedicareEligibleDate, formData.spouseMedicareEligibleDate]);
+
+          // Comprehensive Date Logic for Section 4 & Section 5 (Sequential and Exact)
+          useEffect(() => {
+              if (!formData.existingCoverageEndDate || !formData.extendedCoverageEndDate) return;
+
+              const addDays = (dateStr, days) => { 
+                  const p = parseDateParts(dateStr);
+                  if(!p) return ''; 
+                  const o = new Date(p.y, p.m - 1, p.d + days); 
+                  return `${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,'0')}-${String(o.getDate()).padStart(2,'0')}`; 
+              };
+              
+              const addMonthsStrict = (dateStr, months) => { 
+                  const p = parseDateParts(dateStr);
+                  if(!p || !months || parseInt(months) === 0) return ''; 
+                  const o = new Date(p.y, p.m - 1 + parseInt(months, 10), p.d - 1); 
+                  return `${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,'0')}-${String(o.getDate()).padStart(2,'0')}`; 
+              };
+
+              const addMonthsEndOfMonth = (dateStr, months) => {
+                  const p = parseDateParts(dateStr);
+                  if(!p || !months || parseInt(months) === 0) return ''; 
+                  // targetMonth is calculated strictly based on the month we are landing in, adjusting -1 for current month usage
+                  const targetMonth = p.m - 1 + parseInt(months, 10) - 1;
+                  const o = new Date(p.y, targetMonth + 1, 0); 
+                  return `${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,'0')}-${String(o.getDate()).padStart(2,'0')}`; 
+              };
+
+              // EE S4 Dates
+              const s4_start_ee = addDays(formData.existingCoverageEndDate, 1);
+              let eeS4End = addMonthsStrict(s4_start_ee, formData.s4_ee_monthsUsed);
+              // Snaps end date to exactly 1 day before Medicare Eligibility if they used enough months to reach it
+              if (Number(formData.s4_ee_monthsUsed) > 0 && Number(formData.s4_ee_monthsUsed) >= Number(formData.monthsToEEMedicare)) {
+                  eeS4End = addDays(formData.eeMedicareEligibleDate, -1);
+              }
+
+              // Spouse S4 Dates
+              let s4_start_sp = s4_start_ee;
+              // If employee uses pre-medicare months, Spouse sequentially follows 
+              if (Number(formData.s4_ee_monthsUsed) > 0 && eeS4End) {
+                  s4_start_sp = addDays(eeS4End, 1);
+              }
+              let spS4End = addMonthsStrict(s4_start_sp, formData.s4_sp_monthsUsed);
+              // Snaps end date to exactly 1 day before Medicare Eligibility if they used enough months to reach it
+              if (Number(formData.s4_sp_monthsUsed) > 0 && Number(formData.s4_sp_monthsUsed) >= Math.max(0, Number(formData.monthsToSpouseMedicare) - Number(formData.s4_ee_monthsUsed))) {
+                  spS4End = addDays(formData.spouseMedicareEligibleDate, -1);
+              }
+
+              // EE S5 Dates (Starts day after their S4 ends OR day after extended coverage)
+              let s5_start_ee = addDays(formData.extendedCoverageEndDate, 1);
+              if (Number(formData.s4_ee_monthsUsed) > 0 && eeS4End) {
+                  s5_start_ee = addDays(eeS4End, 1);
+              }
+              const eeS5End = addMonthsEndOfMonth(s5_start_ee, formData.s5_ee_monthsUsed);
+
+              // Spouse S5 Dates
+              let s5_start_sp = addDays(formData.extendedCoverageEndDate, 1);
+              if (Number(formData.s4_sp_monthsUsed) > 0 && spS4End) {
+                  s5_start_sp = addDays(spS4End, 1);
+              } else if (Number(formData.s4_ee_monthsUsed) > 0 && eeS4End) {
+                  s5_start_sp = addDays(eeS4End, 1);
+              }
+              const spS5End = addMonthsEndOfMonth(s5_start_sp, formData.s5_sp_monthsUsed);
+
+              // PEHP State Paid End Date Logic
+              const calculatedPEHPEnd = (Number(formData.s4_ee_monthsUsed) > 0 && eeS4End) 
+                  ? eeS4End 
+                  : formData.existingCoverageEndDate;
+
+              setFormData(prev => {
+                  const nextDates = {
+                      s4_ee_beginDate: formData.s4_ee_monthsUsed > 0 ? s4_start_ee : '',
+                      s4_ee_endDate: eeS4End,
+                      s4_sp_beginDate: formData.s4_sp_monthsUsed > 0 ? s4_start_sp : '',
+                      s4_sp_endDate: spS4End,
+                      s5_ee_beginDate: formData.s5_ee_monthsUsed > 0 ? s5_start_ee : '',
+                      s5_ee_endDate: eeS5End,
+                      s5_sp_beginDate: formData.s5_sp_monthsUsed > 0 ? s5_start_sp : '',
+                      s5_sp_endDate: spS5End,
+                      statePaidPEHPEndDate: calculatedPEHPEnd
+                  };
+
+                  let hasChanges = false;
+                  for (let key in nextDates) {
+                      if (prev[key] !== nextDates[key]) {
+                          hasChanges = true;
+                          break;
+                      }
+                  }
+                  
+                  if (!hasChanges) return prev;
+                  return { ...prev, ...nextDates };
+              });
+          }, [
+              formData.existingCoverageEndDate, formData.extendedCoverageEndDate, 
+              formData.s4_ee_monthsUsed, formData.s4_sp_monthsUsed, 
+              formData.s5_ee_monthsUsed, formData.s5_sp_monthsUsed,
+              formData.monthsToEEMedicare, formData.monthsToSpouseMedicare,
+              formData.eeMedicareEligibleDate, formData.spouseMedicareEligibleDate
+          ]);
+
+          const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
+          const handleDependentChange = (id, field, value) => {
+            setFormData(prev => {
+              const updatedDependents = prev.dependents.map(d => {
+                if (d.id !== id) return d;
+                let newValue = value;
+                if (field === 'ssn') newValue = formatSSN(value);
+                return { ...d, [field]: newValue };
+              });
+              return { ...prev, dependents: updatedDependents };
+            });
+          };
+
+          const addDependent = () => {
+            const newId = formData.dependents.length > 0 ? Math.max(...formData.dependents.map(d => d.id)) + 1 : 1;
+            setFormData(prev => ({ ...prev, dependents: [...prev.dependents, { id: newId, ssn: '', firstName: '', lastName: '', birthDate: '', age: '', disabled: 'No' }] }));
+          };
+
+          const removeDependent = (id) => {
+            setFormData(prev => ({ ...prev, dependents: prev.dependents.filter(d => d.id !== id) }));
+          };
+
+          if (view === 'summary') {
+              return (
+                <div className="min-h-screen bg-gray-100 p-6 md:p-10 font-sans print:bg-white print:p-0">
+                  <div className="max-w-6xl mx-auto bg-white border border-gray-400 p-8 shadow-sm print:shadow-none print:border-none print:p-0">
+                    
+                    {/* Summary Controls */}
+                    <div className="flex justify-between items-center mb-6 print:mb-2 no-print border-b pb-4">
+                        <button onClick={() => setView('entry')} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded font-semibold transition">
+                            <ArrowLeft size={16} /> Go Back to Entry
+                        </button>
+                        <button onClick={() => window.print()} className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-6 py-2 rounded font-bold transition">
+                            <Printer size={18} /> Print Summary
+                        </button>
+                    </div>
+
+                    <div className="text-center mb-6 print:mb-3">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500 mb-1 print:text-[11px]">Final Summary Report</h2>
+                        <h1 className="text-2xl font-bold text-gray-900 border-b-2 border-blue-900 inline-block pb-1 print:text-xl">Retirement Health Insurance Worksheet</h1>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-10 print:gap-x-8 gap-y-6 print:gap-y-2">
+                        {/* Employee Column */}
+                        <div className="space-y-3 print:space-y-1">
+                            <div className="border-b-2 border-gray-100 pb-1">
+                                <h3 className="text-base print:text-sm font-black uppercase text-blue-900 flex items-center gap-2">Employee Information</h3>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3 print:gap-y-1">
+                                <SummaryItem label="Name" value={formData.employeeName} />
+                                <SummaryItem label="Personnel Number" value={formData.personnelNumber} />
+                                <SummaryItem label="Social Security Number" value={maskSSN(formData.empSSN)} />
+                                <SummaryItem label="EE Group" value={formData.eeGroup} />
+                                <SummaryItem label="Dept/Unit" value={formData.deptUnit} />
+                                <SummaryItem label="Pay Rate" value={formData.payRate} />
+                                <SummaryItem label="Hire Date" value={formData.hireDate} />
+                                <SummaryItem label="Last Day Paid" value={formData.lastDayPaid} />
+                                <SummaryItem label="Retirement Date" value={formData.retirementDate} />
+                                <SummaryItem label="Age at Retirement" value={formData.employeeAgeRetirement} />
+                                <SummaryItem label="PP End Date" value={formData.ppEndDate} />
+                                <SummaryItem label="Plan End Date" value={formData.planEndDate} />
+                                <SummaryItem label="65th Birthday" value={formData.ee65thBirthday} />
+                                <SummaryItem label="Medicare Eligible Date" value={formData.eeMedicareEligibleDate} />
+                                <SummaryItem label="Medical Plan" value={formData.medPlan} />
+                                <SummaryItem label="Coverage" value={formData.medCoverage} />
+                                <SummaryItem label="Early Medicare?" value={formData.eeEarlyMedicare} />
+                                <SummaryItem label="Declining Coverage?" value={formData.declineCoverage} />
+                            </div>
+                        </div>
+
+                        {/* Spouse Column & Criteria */}
+                        <div className="flex flex-col space-y-4 print:space-y-2">
+                            <div className="space-y-3 print:space-y-1">
+                                <div className="border-b-2 border-gray-100 pb-1">
+                                    <h3 className="text-base print:text-sm font-black uppercase text-purple-900 flex items-center gap-2">Spouse Information</h3>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-3 print:gap-y-1 mt-2 print:mt-1">
+                                    <SummaryItem label="Name" value={formData.spouseName} />
+                                    <SummaryItem label="Social Security Number" value={maskSSN(formData.spouseSSN)} />
+                                    <SummaryItem label="Birth Date" value={formData.spouseBirthDate} />
+                                    <SummaryItem label="Age at Retirement" value={formData.spouseAgeRetirement} />
+                                    <SummaryItem label="65th Birthday" value={formData.spouse65thBirthday} />
+                                    <SummaryItem label="Medicare Eligible Date" value={formData.spouseMedicareEligibleDate} />
+                                    <SummaryItem label="Early Medicare?" value={formData.spouseEarlyMedicare} />
+                                    <SummaryItem label="Transferring (EE Deceased)?" value={formData.isDeathBenefit} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 print:space-y-1 pt-2">
+                                <div className="border-b-2 border-gray-100 pb-1">
+                                    <h3 className="text-base print:text-sm font-black uppercase text-teal-800 flex items-center gap-2">Coverage Criteria</h3>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-3 print:gap-y-1">
+                                    <SummaryItem label="Coverage Mos. at Retirement" value={formData.coverageMonthsAtRetirement} />
+                                    <SummaryItem label="Remaining Mos." value={formData.remainingCoverageMonths} className="text-blue-900 font-bold" />
+                                    <SummaryItem label="Existing Coverage End" value={formData.existingCoverageEndDate} />
+                                    <SummaryItem label="Extended Coverage End" value={formData.extendedCoverageEndDate} />
+                                    <SummaryItem label="Months to EE Medicare" value={formData.monthsToEEMedicare} />
+                                    <SummaryItem label="Months to Spouse Medicare" value={formData.monthsToSpouseMedicare} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 4: Health Continuation */}
+                    <div className="mt-6 print:mt-2 space-y-3 print:space-y-1">
+                        <div className="border-b-2 border-gray-100 pb-1">
+                            <h3 className="text-base print:text-sm font-black uppercase text-gray-800">Health Insurance Continuation</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-10 print:gap-6 bg-gray-50 print:bg-gray-50/50 p-4 print:p-2 border rounded border-gray-200">
+                            <div className="space-y-3 print:space-y-1.5">
+                                <h4 className="text-xs font-bold text-blue-800 uppercase">Employee Allotment</h4>
+                                <div className="grid grid-cols-3 gap-4 print:gap-2">
+                                    <SummaryItem label="Months" value={formData.s4_ee_monthsUsed} />
+                                    <SummaryItem label="Begin Date" value={formData.s4_ee_beginDate} />
+                                    <SummaryItem label="End Date" value={formData.s4_ee_endDate} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 print:gap-2">
+                                    <SummaryItem label="Calculated Plan" value={formData.s4_ee_medPlan} />
+                                    <SummaryItem label="Coverage" value={formData.s4_ee_medCoverage} />
+                                </div>
+                            </div>
+                            <div className="space-y-3 print:space-y-1.5">
+                                <h4 className="text-xs font-bold text-purple-800 uppercase">Spouse Allotment</h4>
+                                <div className="grid grid-cols-3 gap-4 print:gap-2">
+                                    <SummaryItem label="Months" value={formData.s4_sp_monthsUsed} />
+                                    <SummaryItem label="Begin Date" value={formData.s4_sp_beginDate} />
+                                    <SummaryItem label="End Date" value={formData.s4_sp_endDate} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 print:gap-2">
+                                    <SummaryItem label="Calculated Plan" value={formData.s4_sp_medPlan} />
+                                    <SummaryItem label="Coverage" value={formData.s4_sp_medCoverage} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 5: Medicare Supplement */}
+                    <div className="mt-6 print:mt-2 space-y-3 print:space-y-1">
+                        <div className="border-b-2 border-gray-100 pb-1">
+                            <h3 className="text-base print:text-sm font-black uppercase text-gray-800">Medicare Supplement</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-10 print:gap-6 bg-gray-50 print:bg-gray-50/50 p-4 print:p-2 border rounded border-gray-200">
+                            <div className="space-y-3 print:space-y-1.5">
+                                <h4 className="text-xs font-bold text-blue-800 uppercase">Employee Supplement</h4>
+                                <div className="grid grid-cols-3 gap-4 print:gap-2">
+                                    <SummaryItem label="Months" value={formData.s5_ee_monthsUsed} />
+                                    <SummaryItem label="Begin Date" value={formData.s5_ee_beginDate} />
+                                    <SummaryItem label="End Date" value={formData.s5_ee_endDate} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 print:gap-2">
+                                    <SummaryItem label="Medicare Plan" value={formData.s5_ee_medPlan} />
+                                    <SummaryItem label="Pharmacy Plan" value={formData.s5_ee_medPharmacy} />
+                                </div>
+                            </div>
+                            <div className="space-y-3 print:space-y-1.5">
+                                <h4 className="text-xs font-bold text-purple-800 uppercase">Spouse Supplement</h4>
+                                <div className="grid grid-cols-3 gap-4 print:gap-2">
+                                    <SummaryItem label="Months" value={formData.s5_sp_monthsUsed} />
+                                    <SummaryItem label="Begin Date" value={formData.s5_sp_beginDate} />
+                                    <SummaryItem label="End Date" value={formData.s5_sp_endDate} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 print:gap-2">
+                                    <SummaryItem label="Medicare Plan" value={formData.s5_sp_medPlan} />
+                                    <SummaryItem label="Pharmacy Plan" value={formData.s5_sp_medPharmacy} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-10 print:gap-8 mt-6 print:mt-3 items-start">
+                         {/* Section 3: Life Insurance */}
+                        <div>
+                            <div className="border-b-2 border-gray-100 pb-1 mb-3 print:mb-1">
+                                <h3 className="text-base print:text-sm font-black uppercase text-gray-800">Life Insurance</h3>
+                            </div>
+                            <SummaryItem label="State Paid PEHP End Date" value={formData.statePaidPEHPEndDate} />
+                        </div>
+
+                        {/* Dependents */}
+                        <div>
+                            <div className="border-b-2 border-gray-100 pb-1 mb-3 print:mb-1">
+                                <h3 className="text-base print:text-sm font-black uppercase text-gray-800">Dependents</h3>
+                            </div>
+                            {formData.dependents.length > 0 ? (
+                                <div className="space-y-1.5 print:space-y-0.5">
+                                    {formData.dependents.map(d => (
+                                        <div key={d.id} className="text-sm print:text-xs flex justify-between border-b border-dashed border-gray-200 pb-1">
+                                            <span className="font-bold text-gray-800">{d.firstName} {d.lastName}</span>
+                                            <span className="text-gray-500 font-semibold">SSN: {maskSSN(d.ssn)} <span className="mx-1">|</span> Age: {d.age || '--'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : <span className="text-sm text-gray-400 italic">No dependents recorded.</span>}
+                        </div>
+                    </div>
+
+                    {/* Disclaimer & Signatures Section (Only on Summary) */}
+                    <div className="mt-8 pt-6 print:mt-2 print:pt-2 border-t-4 border-blue-900">
+                        <div className="max-w-4xl">
+                            <h2 className="text-sm print:text-xs font-black uppercase mb-2 text-gray-900">Disclaimer and Signatures</h2>
+                            <p className="text-sm print:text-[11px] leading-relaxed text-gray-700 italic mb-10 print:mb-4">
+                                I understand the insurance coverage periods are estimates and accept that a review by Payroll & PEHP may result in a need to revise the insurance coverage periods. (If a change is required, you will be asked to sign the revised form.)
+                            </p>
+                            
+                            <div className="grid grid-cols-2 gap-x-20 gap-y-6 print:gap-y-4">
+                                <div className="flex flex-col gap-1">
+                                    <div className="border-b border-black w-full h-6 print:h-4"></div>
+                                    <span className="text-xs print:text-[10px] font-black uppercase">Employee Signature</span>
+                                </div>
+                                <div className="flex flex-col gap-1 w-48">
+                                    <div className="border-b border-black w-full h-6 print:h-4"></div>
+                                    <span className="text-xs print:text-[10px] font-black uppercase">Date</span>
+                                </div>
+
+                                <div className="flex flex-col gap-1">
+                                    <div className="border-b border-black w-full h-6 print:h-4"></div>
+                                    <span className="text-xs print:text-[10px] font-black uppercase">Payroll Manager Signature</span>
+                                </div>
+                                <div className="flex flex-col gap-1 w-48">
+                                    <div className="border-b border-black w-full h-6 print:h-4"></div>
+                                    <span className="text-xs print:text-[10px] font-black uppercase">Date</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                  </div>
+                </div>
+              );
+          }
+
+          // DATA ENTRY VIEW (Standard)
+          return (
+            <div className="min-h-screen bg-white p-4 md:p-8 font-sans print:p-0">
+              <div className="max-w-5xl mx-auto bg-white shadow-xl rounded-none border border-gray-400 p-6 md:p-10">
+                
+                {/* Header Section */}
+                <div className="flex justify-between items-start border-b border-gray-300 pb-4 mb-4">
+                  <div>
+                    <h2 className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Program: Z HR RETIREMENT WS</h2>
+                    <h1 className="text-2xl font-bold text-gray-900 mt-1">Retirement Health Insurance Benefit</h1>
+                    <p className="text-xs text-gray-600 mt-1">Date: {new Date().toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex gap-2 no-print">
+                    {!isDataLoaded && (
+                        <label className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium cursor-pointer bg-gray-800 text-white hover:bg-gray-700">
+                          <Upload size={14} /> Upload Data<input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                        </label>
+                    )}
+                    <button onClick={handleQuickSave} className="flex items-center gap-2 bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium"><Save size={14} /> Save Draft</button>
+                    <button onClick={() => setView('summary')} className="flex items-center gap-2 bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold uppercase"><Printer size={14} /> Submit</button>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="space-y-1">
+                  <SectionHeader title="Section 1 - Employee Information" />
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+                      <InputField label="Personnel Number" value={formData.personnelNumber} onChange={e => handleChange('personnelNumber', e.target.value)} />
+                      <InputField label="Employee SSN" value={formData.empSSN} onChange={e => handleChange('empSSN', formatSSN(e.target.value))} />
+                      <InputField label="Employee Name" value={formData.employeeName} readOnly />
+                      <InputField label="Spouse Name" value={formData.spouseName} readOnly placeholder="(Auto-filled from Sec 2)" />
+                      
+                      <InputField label="EE Group" value={formData.eeGroup} readOnly />
+                      <InputField label="Last Day Paid" type="date" value={formData.lastDayPaid} onChange={e => handleChange('lastDayPaid', e.target.value)} />
+                      <div className="md:col-span-2"><InputField label="Dept/Unit" value={formData.deptUnit} readOnly /></div>
+
+                      <div className="md:col-span-2"><SelectField label="Declining coverage (Y/N)?" value={formData.declineCoverage} onChange={e => handleChange('declineCoverage', e.target.value)} options={['Yes', 'No']} /></div>
+                      <div className="md:col-span-2"><SelectField label="Transferring to Spouse (EE Deceased)?" value={formData.isDeathBenefit} onChange={e => handleChange('isDeathBenefit', e.target.value)} options={['Yes', 'No']} /></div>
+
+                      <InputField label="Retirement Date" type="date" value={formData.retirementDate} readOnly className="bg-yellow-50/50" />
+                      <InputField label="Hire Date" type="date" value={formData.hireDate} readOnly />
+                      <InputField label="PP End Date" type="date" value={formData.ppEndDate} readOnly />
+                      <InputField label="Plan End Date" type="date" value={formData.planEndDate} readOnly />
+
+                      <InputField label="Birth Date" type="date" value={formData.birthDate} onChange={e => handleChange('birthDate', e.target.value)} />
+                      <InputField label="Pay Rate" value={formData.payRate} readOnly />
+                  </div>
+
+                  <SectionHeader title="Section 2 - Criteria for Continuation" />
+                  <div className="bg-gray-100 p-4 mb-4 rounded border border-gray-200">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                         <InputField label="Coverage Months at Retirement" value={formData.coverageMonthsAtRetirement} onChange={e => handleChange('coverageMonthsAtRetirement', e.target.value)} className="col-span-full bg-white" />
+                         <InputField label="Employee Age" value={formData.employeeAgeRetirement} readOnly />
+                         <InputField label="Spouse Birth Date" type="date" value={formData.spouseBirthDate} onChange={e => handleChange('spouseBirthDate', e.target.value)} />
+                         <InputField label="Spouse Age" value={formData.spouseAgeRetirement} readOnly />
+                         
+                         <InputField label="Spouse SSN" value={formData.spouseSSN} onChange={e => handleChange('spouseSSN', formatSSN(e.target.value))} />
+                         <InputField label="Spouse First Name" value={formData.spouseFirstName} onChange={e => handleChange('spouseFirstName', e.target.value)} />
+                         <InputField label="Spouse Last Name" value={formData.spouseLastName} onChange={e => handleChange('spouseLastName', e.target.value)} />
+                         <div className="hidden md:block"></div>
+
+                         <InputField label="Existing Coverage End" type="date" value={formData.existingCoverageEndDate} readOnly />
+                         <InputField label="Extended Coverage End" type="date" value={formData.extendedCoverageEndDate} readOnly />
+                         <InputField label="EE Med. Elig. Date" type="date" value={formData.eeMedicareEligibleDate} readOnly />
+                         <InputField label="Spouse Med. Elig. Date" type="date" value={formData.spouseMedicareEligibleDate} readOnly />
+                         
+                         <InputField label="Months to EE Medicare" value={formData.monthsToEEMedicare} readOnly />
+                         <InputField label="Months to Sp Medicare" value={formData.monthsToSpouseMedicare} readOnly />
+                         <InputField label="Remaining Coverage Months" value={formData.remainingCoverageMonths} readOnly className="font-bold text-blue-900" />
+                      </div>
+                  </div>
+
+                  <SectionHeader title="Dependents" />
+                  <div className="mb-6 bg-white border border-gray-200 p-4 rounded shadow-sm">
+                      <div className="flex justify-end items-center mb-3">
+                        <button onClick={addDependent} className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1 font-semibold print:hidden"><Plus size={14} /> Add Dependent</button>
+                      </div>
+                      <table className="w-full text-xs text-left border-collapse">
+                          <thead>
+                            <tr className="text-gray-500 border-b border-gray-200">
+                              <th className="p-2 font-semibold">SSN</th>
+                              <th className="p-2 font-semibold">First Name</th>
+                              <th className="p-2 font-semibold">Last Name</th>
+                              <th className="p-2 font-semibold">Birth Date</th>
+                              <th className="p-2 font-semibold">Age</th>
+                              <th className="p-2 font-semibold">Disabled?</th>
+                              <th className="p-2 w-8 print:hidden"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {formData.dependents.map((dep) => (
+                              <tr key={dep.id} className="border-b border-gray-100 last:border-0">
+                                <td className="p-1"><input className="w-full bg-transparent outline-none" value={dep.ssn} onChange={(e) => handleDependentChange(dep.id, 'ssn', e.target.value)} placeholder="000-00-0000" /></td>
+                                <td className="p-1"><input className="w-full bg-transparent outline-none" value={dep.firstName} onChange={(e) => handleDependentChange(dep.id, 'firstName', e.target.value)} placeholder="First Name" /></td>
+                                <td className="p-1"><input className="w-full bg-transparent outline-none" value={dep.lastName} onChange={(e) => handleDependentChange(dep.id, 'lastName', e.target.value)} placeholder="Last Name" /></td>
+                                <td className="p-1"><input type="date" className="w-full bg-transparent outline-none" value={dep.birthDate} onChange={(e) => handleDependentChange(dep.id, 'birthDate', e.target.value)} /></td>
+                                <td className="p-1 text-gray-500">{dep.age}</td>
+                                <td className="p-1"><select className="bg-transparent outline-none" value={dep.disabled} onChange={(e) => handleDependentChange(dep.id, 'disabled', e.target.value)}><option>No</option><option>Yes</option></select></td>
+                                <td className="p-1 text-center print:hidden"><button onClick={() => removeDependent(dep.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12} /></button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                  </div>
+
+                  <SectionHeader title="Section 3 - Life Insurance" />
+                  <div className="grid grid-cols-4 gap-6 mb-4">
+                      <InputField label="PEHP End Date" type="date" value={formData.statePaidPEHPEndDate} readOnly />
+                  </div>
+
+                  <SectionHeader title="Section 4 - Health Insurance Continuation" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="p-3 border border-blue-100 bg-blue-50/20">
+                        <h3 className="pdf-label mb-2 border-b border-blue-100 pb-1">Employee</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <InputField label="Months" value={formData.s4_ee_monthsUsed} readOnly />
+                          <InputField label="Begin Date" type="date" value={formData.s4_ee_beginDate} readOnly />
+                          <InputField label="End Date" type="date" value={formData.s4_ee_endDate} readOnly />
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_ee_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_ee_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_ee_medCoverage', e.target.value)} /></div>
+                        </div>
+                      </div>
+                      <div className="p-3 border border-purple-100 bg-purple-50/20">
+                        <h3 className="pdf-label mb-2 border-b border-purple-100 pb-1">Spouse</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <InputField label="Months" value={formData.s4_sp_monthsUsed} readOnly />
+                          <InputField label="Begin Date" type="date" value={formData.s4_sp_beginDate} readOnly />
+                          <InputField label="End Date" type="date" value={formData.s4_sp_endDate} readOnly />
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_sp_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_sp_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_sp_medCoverage', e.target.value)} /></div>
+                        </div>
+                      </div>
+                  </div>
+
+                  <SectionHeader title="Section 5 - Medicare Supplement" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="p-3 border border-blue-100 bg-blue-50/20">
+                        <h3 className="pdf-label mb-2 border-b border-blue-100 pb-1">Employee Supplement</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <InputField label="Months" value={formData.s5_ee_monthsUsed} onChange={e => handleChange('s5_ee_monthsUsed', e.target.value)} placeholder="0" />
+                          <InputField label="Begin Date" type="date" value={formData.s5_ee_beginDate} readOnly />
+                          <InputField label="End Date" type="date" value={formData.s5_ee_endDate} readOnly />
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_ee_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_ee_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_ee_medPharmacy', e.target.value)} /></div>
+                        </div>
+                      </div>
+                      <div className="p-3 border border-purple-100 bg-purple-50/20">
+                        <h3 className="pdf-label mb-2 border-b border-purple-100 pb-1">Spouse Supplement</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <InputField label="Months" value={formData.s5_sp_monthsUsed} onChange={e => handleChange('s5_sp_monthsUsed', e.target.value)} placeholder="0" />
+                          <InputField label="Begin Date" type="date" value={formData.s5_sp_beginDate} readOnly />
+                          <InputField label="End Date" type="date" value={formData.s5_sp_endDate} readOnly />
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_sp_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_sp_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_sp_medPharmacy', e.target.value)} /></div>
+                        </div>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
