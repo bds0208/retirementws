@@ -975,7 +975,7 @@
                           <InputField label="Months" value={formData.s4_ee_monthsUsed} readOnly />
                           <InputField label="Begin Date" type="date" value={formData.s4_ee_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s4_ee_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_ee_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_ee_medPlan} options={employeeMedicalPlanOptions} onChange={e => handleChange('s4_ee_medPlan', e.target.value)} /></div>
                           <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_ee_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_ee_medCoverage', e.target.value)} /></div>
                         </div>
                       </div>
@@ -985,7 +985,7 @@
                           <InputField label="Months" value={formData.s4_sp_monthsUsed} readOnly />
                           <InputField label="Begin Date" type="date" value={formData.s4_sp_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s4_sp_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_sp_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_sp_medPlan} options={spouseMedicalPlanOptions} onChange={e => handleChange('s4_sp_medPlan', e.target.value)} /></div>
                           <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_sp_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_sp_medCoverage', e.target.value)} /></div>
                         </div>
                       </div>
@@ -999,8 +999,8 @@
                           <InputField label="Months" value={formData.s5_ee_monthsUsed} onChange={e => handleChange('s5_ee_monthsUsed', e.target.value)} placeholder="0" />
                           <InputField label="Begin Date" type="date" value={formData.s5_ee_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s5_ee_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_ee_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_ee_medPlan', e.target.value)} /></div>
-                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_ee_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_ee_medPharmacy', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_ee_medPlan} options={employeeMedicarePlanOptions} onChange={e => handleChange('s5_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_ee_medPharmacy} options={employeePharmacyPlanOptions} onChange={e => handleChange('s5_ee_medPharmacy', e.target.value)} /></div>
                         </div>
                       </div>
                       <div className="p-3 border border-purple-100 bg-purple-50/20">
@@ -1009,8 +1009,8 @@
                           <InputField label="Months" value={formData.s5_sp_monthsUsed} onChange={e => handleChange('s5_sp_monthsUsed', e.target.value)} placeholder="0" />
                           <InputField label="Begin Date" type="date" value={formData.s5_sp_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s5_sp_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_sp_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_sp_medPlan', e.target.value)} /></div>
-                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_sp_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_sp_medPharmacy', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_sp_medPlan} options={spouseMedicarePlanOptions} onChange={e => handleChange('s5_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_sp_medPharmacy} options={spousePharmacyPlanOptions} onChange={e => handleChange('s5_sp_medPharmacy', e.target.value)} /></div>
                         </div>
                       </div>
                   </div>
