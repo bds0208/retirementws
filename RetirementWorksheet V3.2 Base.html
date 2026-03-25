@@ -300,13 +300,9 @@
             "RETIREE SPOUSE CONSUMER PLUS SUMMIT (18+ MONTHS) DOUBLE",
             "RETIREE SPOUSE CONSUMER PLUS SUMMIT (18+ MONTHS) FAMILY"
           ];
-          const employeeMedicalPlanOptions = medicalPlanOptions.filter(plan => !plan.startsWith("RETIREE SPOUSE "));
-          const spouseMedicalPlanOptions = medicalPlanOptions.filter(plan => plan.startsWith("RETIREE SPOUSE "));
           const medicalCoverageOptions = ["Self", "Self & Dependent", "Self + Family"];
-          const employeeMedicarePlanOptions = ["EE RE MEDICARE 100"];
-          const spouseMedicarePlanOptions = ["RETIREE SPOUSE MEDICARE SUPPLEMENTAL PLAN -100"];
-          const employeePharmacyPlanOptions = ["RETIREE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED"];
-          const spousePharmacyPlanOptions = ["RETIREE SPOUSE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED"];
+          const medicarePlanOptions = ["EE RE MEDICARE 100", "RETIREE SPOUSE MEDICARE SUPPLEMENTAL PLAN -100"];
+          const pharmacyPlanOptions = ["RETIREE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED", "RETIREE SPOUSE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED"];
 
           const [formData, setFormData] = useState({
             personnelNumber: '', employeeName: '', empSSN: '', eeGroup: 'Classified', spouseName: '',
