@@ -226,10 +226,87 @@
           const [rawCsvContent, setRawCsvContent] = useState('');
           const [fileHandle, setFileHandle] = useState(null);
 
-          const medicalPlanOptions = ["Traditional - Summit", "Traditional - Advantage", "Star - Summit", "Star - Advantage", "Consumer Plus - Summit", "Consumer Plus - Advantage"];
+          const medicalPlanOptions = [
+            "RETIREE STAR ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE STAR ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE STAR ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE STAR ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE STAR ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE STAR ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE STAR SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE STAR SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE STAR SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE STAR SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE STAR SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE STAR SUMMIT (18+ MONTHS) FAMILY",
+            "RETIREE TRADITIONAL ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE TRADITIONAL ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE TRADITIONAL ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE TRADITIONAL ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE TRADITIONAL ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE TRADITIONAL ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE TRADITIONAL SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE TRADITIONAL SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE TRADITIONAL SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE TRADITIONAL SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE TRADITIONAL SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE TRADITIONAL SUMMIT (18+ MONTHS) FAMILY",
+            "RETIREE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE CONSUMER PLUS ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE CONSUMER PLUS ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE CONSUMER PLUS ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE CONSUMER PLUS SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE CONSUMER PLUS SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE CONSUMER PLUS SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE CONSUMER PLUS SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE CONSUMER PLUS SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE CONSUMER PLUS SUMMIT (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE STAR ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE STAR ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE STAR ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE STAR ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE STAR ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE STAR ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE STAR SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE STAR SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE STAR SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE STAR SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE STAR SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE STAR SUMMIT (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE TRADITIONAL ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE TRADITIONAL SUMMIT (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE CONSUMER PLUS ADVANTAGE (18+ MONTHS) FAMILY",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (1-18 MONTHS) SINGLE",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (1-18 MONTHS) DOUBLE",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (1-18 MONTHS) FAMILY",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (18+ MONTHS) SINGLE",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (18+ MONTHS) DOUBLE",
+            "RETIREE SPOUSE CONSUMER PLUS SUMMIT (18+ MONTHS) FAMILY"
+          ];
+          const employeeMedicalPlanOptions = medicalPlanOptions.filter(plan => !plan.startsWith("RETIREE SPOUSE "));
+          const spouseMedicalPlanOptions = medicalPlanOptions.filter(plan => plan.startsWith("RETIREE SPOUSE "));
           const medicalCoverageOptions = ["Self", "Self & Dependent", "Self + Family"];
-          const medicarePlanOptions = ["Medical Plan 100", "Medical Plan 75", "Medical Plan 50"];
-          const pharmacyPlanOptions = ["Enhanced Pharmacy Plan"];
+          const employeeMedicarePlanOptions = ["EE RE MEDICARE 100"];
+          const spouseMedicarePlanOptions = ["RETIREE SPOUSE MEDICARE SUPPLEMENTAL PLAN -100"];
+          const employeePharmacyPlanOptions = ["RETIREE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED"];
+          const spousePharmacyPlanOptions = ["RETIREE SPOUSE MEDICARE SUPPLEMENTAL RX PLAN - ENHANCED"];
 
           const [formData, setFormData] = useState({
             personnelNumber: '', employeeName: '', empSSN: '', eeGroup: 'Classified', spouseName: '',
@@ -902,7 +979,7 @@
                           <InputField label="Months" value={formData.s4_ee_monthsUsed} readOnly />
                           <InputField label="Begin Date" type="date" value={formData.s4_ee_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s4_ee_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_ee_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_ee_medPlan} options={employeeMedicalPlanOptions} onChange={e => handleChange('s4_ee_medPlan', e.target.value)} /></div>
                           <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_ee_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_ee_medCoverage', e.target.value)} /></div>
                         </div>
                       </div>
@@ -912,7 +989,7 @@
                           <InputField label="Months" value={formData.s4_sp_monthsUsed} readOnly />
                           <InputField label="Begin Date" type="date" value={formData.s4_sp_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s4_sp_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_sp_medPlan} options={medicalPlanOptions} onChange={e => handleChange('s4_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medical Plan" value={formData.s4_sp_medPlan} options={spouseMedicalPlanOptions} onChange={e => handleChange('s4_sp_medPlan', e.target.value)} /></div>
                           <div className="col-span-2"><SelectField label="Medical Coverage" value={formData.s4_sp_medCoverage} options={medicalCoverageOptions} onChange={e => handleChange('s4_sp_medCoverage', e.target.value)} /></div>
                         </div>
                       </div>
@@ -926,8 +1003,8 @@
                           <InputField label="Months" value={formData.s5_ee_monthsUsed} onChange={e => handleChange('s5_ee_monthsUsed', e.target.value)} placeholder="0" />
                           <InputField label="Begin Date" type="date" value={formData.s5_ee_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s5_ee_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_ee_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_ee_medPlan', e.target.value)} /></div>
-                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_ee_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_ee_medPharmacy', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_ee_medPlan} options={employeeMedicarePlanOptions} onChange={e => handleChange('s5_ee_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_ee_medPharmacy} options={employeePharmacyPlanOptions} onChange={e => handleChange('s5_ee_medPharmacy', e.target.value)} /></div>
                         </div>
                       </div>
                       <div className="p-3 border border-purple-100 bg-purple-50/20">
@@ -936,8 +1013,8 @@
                           <InputField label="Months" value={formData.s5_sp_monthsUsed} onChange={e => handleChange('s5_sp_monthsUsed', e.target.value)} placeholder="0" />
                           <InputField label="Begin Date" type="date" value={formData.s5_sp_beginDate} readOnly />
                           <InputField label="End Date" type="date" value={formData.s5_sp_endDate} readOnly />
-                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_sp_medPlan} options={medicarePlanOptions} onChange={e => handleChange('s5_sp_medPlan', e.target.value)} /></div>
-                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_sp_medPharmacy} options={pharmacyPlanOptions} onChange={e => handleChange('s5_sp_medPharmacy', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Medicare Plan" value={formData.s5_sp_medPlan} options={spouseMedicarePlanOptions} onChange={e => handleChange('s5_sp_medPlan', e.target.value)} /></div>
+                          <div className="col-span-2"><SelectField label="Pharmacy" value={formData.s5_sp_medPharmacy} options={spousePharmacyPlanOptions} onChange={e => handleChange('s5_sp_medPharmacy', e.target.value)} /></div>
                         </div>
                       </div>
                   </div>
