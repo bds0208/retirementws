@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retirement Worksheet Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #persisted-data { display:none; }
+    @media print {
+      .no-print { display:none !important; }
+      .print-card { box-shadow:none !important; border:0 !important; margin:0 !important; }
+      body { background:#fff !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+<div id="root"></div>
+<script id="persisted-data" type="application/json"></script>
+<script type="text/babel">
+const { useMemo, useState, useEffect } = React;
+
+// -------------------------------
+// Config (editable JSON catalogs)
+// -------------------------------
+const DEFAULT_ADMIN_CONFIG = {
+  payrollMode: "semiMonthlyFixed",
+  semiMonthlyBoundaries: { firstHalfEndDay: 15, secondHalfEndDay: 31 },
+  payCalendarTable: [],
+  employerLegacyExtendedCoverageHireDate: "2003-02-15",
+  employerLegacyCoverageExtensionDays: 14,
+  agencyParticipatesInProgramI: true,
+  allowLowerLevelPlanAtRetirement: false,
+  useSamePlanOnlyIfLowerLevelUnknown: true,
+  enableLineOfDutySpouseRule: true,
+  earlyRetireePlanCatalog: {
+    "Traditional Plan - Advantage Network": mkPlan(),
+    "Traditional Plan - Summit Network": mkPlan(),
+    "Consumer Plus - Summit Network": mkPlan()
+  },
+  medicareSupplementCatalog: {
+    "Plan 100": { enabled: true },
+    "Plan 75": { enabled: true },
+    "Plan 50": { enabled: true }
+  },
+  pharmacyCatalog: {
+    "Enhanced": { enabled: true }
+  }
+};
+
+function mkPlan() {
+  return {
+    enabled: true,
+    tiers: {
+      Single: { first18Months: { retireeShare: 0, stateShare: 0, total: 0 }, after18Months: { retireeShare: 0, stateShare: 0, total: 0 } },
+      Double: { first18Months: { retireeShare: 0, stateShare: 0, total: 0 }, after18Months: { retireeShare: 0, stateShare: 0, total: 0 } },
+      Family: { first18Months: { retireeShare: 0, stateShare: 0, total: 0 }, after18Months: { retireeShare: 0, stateShare: 0, total: 0 } }
+    }
+  }
+}
+
+const BASE_DATA = {
+  personnelNumber:"", employeeName:"", empSSN:"", eeGroup:"", spouseName:"", declineCoverage:false, isDeathBenefit:false,
+  retirementDate:"", lastDayPaid:"", hireDate:"", birthDate:"", payRate:"", ppEndDate:"", medPlan:"", medCoverage:"Single",
+  deptUnit:"", deptName:"", planEndDate:"", coverageMonthsAtRetirement:"", employeeAgeRetirement:"", spouseAgeRetirement:"",
+  spouseSSN:"", spouseFirstName:"", spouseLastName:"", spouseBirthDate:"", existingCoverageEndDate:"", extendedCoverageEndDate:"",
+  ee65thBirthday:"", spouse65thBirthday:"", eeMedicareEligibleDate:"", spouseMedicareEligibleDate:"", monthsToEEMedicare:"",
+  monthsToSpouseMedicare:"", remainingCoverageMonths:"", dependents:[], statePaidPEHPEndDate:"",
+  s4_ee_monthsUsed:"", s4_ee_beginDate:"", s4_ee_endDate:"", s4_ee_medPlan:"", s4_ee_medCoverage:"",
+  s4_sp_monthsUsed:"", s4_sp_beginDate:"", s4_sp_endDate:"", s4_sp_medPlan:"", s4_sp_medCoverage:"",
+  s5_ee_monthsUsed:"", s5_ee_beginDate:"", s5_ee_endDate:"", s5_ee_medPlan:"", s5_ee_medPharmacy:"",
+  s5_sp_monthsUsed:"", s5_sp_beginDate:"", s5_sp_endDate:"", s5_sp_medPlan:"", s5_sp_medPharmacy:"",
+
+  calculationMode:"manual-months", manualCoverageMonthsInput:"",
+  program1SickHours:"", program1ConvertedHours:"", program2SickHours:"", program2ConvertedHours:"", program3SickHours:"",
+  hourlyRateAtRetirement:"", rateFor401kValuation:"", avgRetireeRatePreviousCalendarYear:"",
+  annual401kLimit:"", currentYear401kContributionsEmployee:"", currentYear401kContributionsEmployer:"", remaining401kRoomOverride:"",
+  final401kContributionAmountOverride:"", agencyParticipatesInProgramI:true,
+  eeHasMedicarePartA:false, eePartAEffectiveDate:"", eeHasMedicarePartB:false, eePartBEffectiveDate:"", eeHasEarlyMedicareDisability:false,
+  spouseHasMedicarePartA:false, spousePartAEffectiveDate:"", spouseHasMedicarePartB:false, spousePartBEffectiveDate:"", spouseHasEarlyMedicareDisability:false,
+  pehpEnrollmentReceivedDateEmployee:"", pehpEnrollmentReceivedDateSpouse:"",
+  programIHoursUsedFor401k:"", programIIHoursUsedFor401k:"", programIValueUsedFor401k:"", programIIValueUsedFor401k:"",
+  final401kContributionAmount:"", remainingProgramIHoursAfter401k:"", remainingProgramIIHoursAfter401k:"", hraValuationRateUsed:"", hraDepositAmount:"",
+  equivalentCoverageMonthsEstimate:"", assumptionsAndWarnings:[], auditTimelineRows:[],
+  adminConfig: DEFAULT_ADMIN_CONFIG,
+  blockFinalSummary:false
+};
+
+// -------------------------------
+// Pure helpers required by spec
+// -------------------------------
+const parseDate = (s) => {
+  if (!s) return null;
+  const d = new Date(s + "T00:00:00");
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+const formatDate = (d) => d ? d.toISOString().slice(0,10) : "";
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const addMonths = (d, n) => { const x = new Date(d); x.setMonth(x.getMonth()+n); return x; };
+const firstOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth()+1, 0);
+const calculateAge = (birth, onDate) => {
+  if (!birth || !onDate) return "";
+  let age = onDate.getFullYear()-birth.getFullYear();
+  const m = onDate.getMonth()-birth.getMonth();
+  if (m < 0 || (m===0 && onDate.getDate() < birth.getDate())) age--;
+  return age;
+};
+const calculateAge65EligibilityDate = (birth) => {
+  if (!birth) return null;
+  const sixtyFive = new Date(birth.getFullYear()+65, birth.getMonth(), birth.getDate());
+  return birth.getDate() === 1 ? new Date(sixtyFive.getFullYear(), sixtyFive.getMonth()-1, 1) : new Date(sixtyFive.getFullYear(), sixtyFive.getMonth(), 1);
+};
+const calculateRetirementDateFromLastDayPaid = (lastDayPaid) => {
+  const d = parseDate(lastDayPaid);
+  if (!d) return null;
+  return d.getDate() <= 15 ? new Date(d.getFullYear(), d.getMonth(), 16) : new Date(d.getFullYear(), d.getMonth()+1, 1);
+};
+const normalizeTier = (t) => ({"Self":"Single","Self & Dependent":"Double","Self + Family":"Family"}[t] || t || "Single");
+const monthDiffFloor = (from, to) => {
+  if (!from || !to || to < from) return 0;
+  return (to.getFullYear()-from.getFullYear())*12 + (to.getMonth()-from.getMonth());
+};
+
+const calculateCoverageEndDates = (data, adminConfig) => {
+  const lastPaid = parseDate(data.lastDayPaid);
+  const retirementDate = parseDate(data.retirementDate) || calculateRetirementDateFromLastDayPaid(data.lastDayPaid);
+  let ppEndDate = null;
+  if (adminConfig.payrollMode === "semiMonthlyFixed") {
+    if (lastPaid) ppEndDate = lastPaid.getDate() <= adminConfig.semiMonthlyBoundaries.firstHalfEndDay
+      ? new Date(lastPaid.getFullYear(), lastPaid.getMonth(), adminConfig.semiMonthlyBoundaries.firstHalfEndDay)
+      : endOfMonth(lastPaid);
+  } else if (adminConfig.payCalendarTable?.length && lastPaid) {
+    const sorted = [...adminConfig.payCalendarTable].map(parseDate).filter(Boolean).sort((a,b)=>a-b);
+    ppEndDate = sorted.find(x => x >= lastPaid) || lastPaid;
+  }
+  const planEndDate = ppEndDate ? endOfMonth(ppEndDate) : (retirementDate ? endOfMonth(retirementDate) : null);
+  let existingCoverageEndDate = planEndDate;
+  const hireDate = parseDate(data.hireDate);
+  const legacyCutoff = parseDate(adminConfig.employerLegacyExtendedCoverageHireDate);
+  if (existingCoverageEndDate && hireDate && legacyCutoff && hireDate <= legacyCutoff) {
+    existingCoverageEndDate = addDays(existingCoverageEndDate, adminConfig.employerLegacyCoverageExtensionDays || 0);
+  }
+  const eeMed = parseDate(data.eeMedicareEligibleDate);
+  let extendedCoverageEndDate = existingCoverageEndDate;
+  if (eeMed && existingCoverageEndDate && eeMed <= existingCoverageEndDate && formatDate(existingCoverageEndDate) !== formatDate(endOfMonth(existingCoverageEndDate))) {
+    extendedCoverageEndDate = endOfMonth(existingCoverageEndDate);
+  }
+  return { retirementDate, ppEndDate, planEndDate, existingCoverageEndDate, extendedCoverageEndDate };
+};
+
+const medicareEligibility = (person, birthDate, ageBasedDate) => {
+  const partA = person.hasA ? parseDate(person.partA) : null;
+  const partB = person.hasB ? parseDate(person.partB) : null;
+  const medical = (partA && partB) ? (partA > partB ? partA : partB) : ageBasedDate;
+  const pharmacy = (partA && partB) ? (partA < partB ? partA : partB) : (partA || partB || ageBasedDate);
+  return {
+    medicalDate: medical,
+    pharmacyDate: pharmacy,
+    medicalIsEstimated: !(partA && partB),
+    pharmacyIsEstimated: !(partA || partB),
+    hasMedicalEligibility: !!(partA && partB),
+    hasPharmacyEligibility: !!(partA || partB)
+  };
+};
+
+const calculate401kAllocation = (inputs) => {
+  const P1 = num(inputs.program1);
+  const P2 = num(inputs.program2);
+  const rate = num(inputs.rate);
+  const eligibleValue = (P1 + P2) * rate;
+  const target401k = eligibleValue * 0.25;
+  const availableRoom = inputs.roomOverride !== "" ? num(inputs.roomOverride) : (num(inputs.limit) - num(inputs.eeContrib) - num(inputs.erContrib));
+  let final = null;
+  let blocking = false;
+  if (inputs.finalOverride !== "") {
+    final = num(inputs.finalOverride);
+  } else if (target401k <= availableRoom) {
+    final = target401k;
+  } else {
+    blocking = true;
+    final = target401k;
+  }
+  const p2ValueUse = Math.min(final, P2 * rate);
+  const p1ValueUse = Math.max(0, final - p2ValueUse);
+  const p2HoursUse = rate > 0 ? p2ValueUse / rate : 0;
+  const p1HoursUse = rate > 0 ? p1ValueUse / rate : 0;
+  return {
+    eligibleValue, target401k, availableRoom,
+    final401kContributionAmount: final,
+    blocking401kCap: blocking,
+    programIIValueUsedFor401k: p2ValueUse,
+    programIValueUsedFor401k: p1ValueUse,
+    programIIHoursUsedFor401k: p2HoursUse,
+    programIHoursUsedFor401k: p1HoursUse,
+    remainingProgramIHoursAfter401k: Math.max(0, P1 - p1HoursUse),
+    remainingProgramIIHoursAfter401k: Math.max(0, P2 - p2HoursUse)
+  };
+};
+
+const calculateHraAllocation = (remainingP2, hourlyRate, avgRetireeRate) => {
+  const hraValuationRateUsed = Math.max(num(hourlyRate), num(avgRetireeRate));
+  return { hraValuationRateUsed, hraDepositAmount: remainingP2 * hraValuationRateUsed };
+};
+
+const calculateProgramIInsuranceBank = (P1, p1UsedFor401k) => Math.max(0, P1 - p1UsedFor401k);
+
+const isTimelyEnrollment = (receivedDate, triggerMonthDate) => {
+  if (!receivedDate) return { timely:true, assumed:true };
+  const r = parseDate(receivedDate);
+  if (!r || !triggerMonthDate) return { timely:true, assumed:false };
+  const cutoff = addDays(firstOfMonth(triggerMonthDate), -30);
+  return { timely: r <= cutoff, assumed:false };
+};
+
+const buildCoverageTimeline = (ctx) => {
+  const rows = [];
+  let bank = num(ctx.programIHoursBank);
+  if (!ctx.agencyParticipatesInProgramI || bank <= 0) return { rows, remainingHours: bank };
+
+  let current = firstOfMonth(addDays(ctx.coverageStart, 0));
+  const hardStop = addMonths(current, 600);
+
+  while (bank >= 8 && current < hardStop) {
+    const rowStartDate = current;
+    const rowEndDate = endOfMonth(current);
+
+    const eePre = rowStartDate < firstOfMonth(ctx.eeMedicalDate);
+    const spPre = ctx.hasSpouse ? rowStartDate < firstOfMonth(ctx.spMedicalDate) : false;
+
+    let employeeCoverageType = "none";
+    let spouseCoverageType = "none";
+    let dependentCoverageType = "none";
+    let notes = [];
+    let burn = 0;
+
+    if (!ctx.declineCoverage) {
+      if (eePre) {
+        employeeCoverageType = "preMedMedical";
+        burn += 8;
+        if (ctx.hasOrdinaryDependents) dependentCoverageType = "familyPreMedOnly";
+      } else {
+        if (ctx.eeCanMedical && rowStartDate >= firstOfMonth(ctx.eeMedStart)) {
+          employeeCoverageType = "medSupplement";
+          burn += 8;
+        } else if (ctx.eeCanPharmacy && rowStartDate >= firstOfMonth(ctx.eePharmStart)) {
+          employeeCoverageType = "pharmacyOnly";
+          burn += 8;
+        }
+      }
+
+      if (ctx.hasSpouse) {
+        if (spPre) {
+          if (!eePre) { spouseCoverageType = "preMedMedical"; burn += 8; }
+          else spouseCoverageType = "preMedMedical";
+        } else {
+          if (ctx.spCanMedical && rowStartDate >= firstOfMonth(ctx.spMedStart)) {
+            spouseCoverageType = "medSupplement";
+            burn += 8;
+          } else if (ctx.spCanPharmacy && rowStartDate >= firstOfMonth(ctx.spPharmStart)) {
+            spouseCoverageType = "pharmacyOnly";
+            burn += 8;
+          }
+        }
+      }
+
+      if (!eePre && ctx.hasOrdinaryDependents) notes.push("Ordinary dependents terminate when employee transitions to Medicare.");
+      if (ctx.hasDisabledDependent) {
+        dependentCoverageType = "disabledDependentReviewed";
+        notes.push("Approved disabled dependent present: admin review required.");
+      }
+    }
+
+    if (burn <= 0 || bank < burn) break;
+    bank -= burn;
+
+    rows.push({
+      rowStartDate: formatDate(rowStartDate),
+      rowEndDate: formatDate(rowEndDate),
+      employeeCoverageType,
+      spouseCoverageType,
+      dependentCoverageType,
+      programIHoursBurnedThisMonth: burn,
+      plansUsed: `${ctx.s4Plan || ""} | ${ctx.s5Plan || ""} | ${ctx.pharmacyPlan || ""}`,
+      notes: notes.join(" ")
+    });
+
+    const allNone = employeeCoverageType === "none" && spouseCoverageType === "none";
+    if (allNone) break;
+    current = addMonths(current, 1);
+  }
+  return { rows, remainingHours: bank };
+};
+
+const determineSection4Outputs = (rows, data) => {
+  const eeRows = rows.filter(r => r.employeeCoverageType === "preMedMedical");
+  const spRows = rows.filter(r => r.spouseCoverageType === "preMedMedical");
+  return {
+    s4_ee_monthsUsed: eeRows.length,
+    s4_ee_beginDate: eeRows[0]?.rowStartDate || "",
+    s4_ee_endDate: eeRows.at(-1)?.rowEndDate || "",
+    s4_ee_medPlan: data.medPlan || "",
+    s4_ee_medCoverage: normalizeTier(data.medCoverage),
+    s4_sp_monthsUsed: spRows.length,
+    s4_sp_beginDate: spRows[0]?.rowStartDate || "",
+    s4_sp_endDate: spRows.at(-1)?.rowEndDate || "",
+    s4_sp_medPlan: data.medPlan || "",
+    s4_sp_medCoverage: normalizeTier(data.medCoverage)
+  };
+};
+
+const determineSection5Outputs = (rows, data) => {
+  const eeRows = rows.filter(r => r.employeeCoverageType === "medSupplement" || r.employeeCoverageType === "pharmacyOnly");
+  const spRows = rows.filter(r => r.spouseCoverageType === "medSupplement" || r.spouseCoverageType === "pharmacyOnly");
+  return {
+    s5_ee_monthsUsed: eeRows.length,
+    s5_ee_beginDate: eeRows[0]?.rowStartDate || "",
+    s5_ee_endDate: eeRows.at(-1)?.rowEndDate || "",
+    s5_ee_medPlan: data.s5_ee_medPlan || "Plan 100",
+    s5_ee_medPharmacy: data.s5_ee_medPharmacy || "Enhanced",
+    s5_sp_monthsUsed: spRows.length,
+    s5_sp_beginDate: spRows[0]?.rowStartDate || "",
+    s5_sp_endDate: spRows.at(-1)?.rowEndDate || "",
+    s5_sp_medPlan: data.s5_sp_medPlan || "Plan 100",
+    s5_sp_medPharmacy: data.s5_sp_medPharmacy || "Enhanced"
+  };
+};
+
+const allocateManualMonths = (data, derived) => {
+  const monthsPool = Math.max(0, num(data.manualCoverageMonthsInput || data.coverageMonthsAtRetirement));
+  let bank = monthsPool * 8;
+  const time = buildCoverageTimeline({ ...derived.timelineCtx, programIHoursBank: bank });
+  const s4 = determineSection4Outputs(time.rows, data);
+  const s5 = determineSection5Outputs(time.rows, data);
+  return {
+    ...s4, ...s5,
+    coverageMonthsAtRetirement: monthsPool,
+    remainingCoverageMonths: Math.floor(time.remainingHours / 8),
+    equivalentCoverageMonthsEstimate: Math.floor((monthsPool*8)/8),
+    auditTimelineRows: time.rows,
+    statePaidPEHPEndDate: time.rows.at(-1)?.rowEndDate || ""
+  };
+};
+
+const allocateFullSickLeave = (data, derived) => {
+  const p1 = num(data.program1SickHours) + num(data.program1ConvertedHours);
+  const p2 = num(data.program2SickHours) + num(data.program2ConvertedHours);
+  const p3 = num(data.program3SickHours);
+
+  const allocation = calculate401kAllocation({
+    program1: p1, program2: p2,
+    rate: num(data.rateFor401kValuation || data.hourlyRateAtRetirement),
+    roomOverride: data.remaining401kRoomOverride,
+    limit: data.annual401kLimit,
+    eeContrib: data.currentYear401kContributionsEmployee,
+    erContrib: data.currentYear401kContributionsEmployer,
+    finalOverride: data.final401kContributionAmountOverride
+  });
+
+  if (allocation.blocking401kCap && data.final401kContributionAmountOverride === "") {
+    return {
+      ...allocation,
+      blocking401kCap: true,
+      assumptionsAndWarnings: ["401(k) IRS room appears to cap the required contribution. Manual review required before finalizing downstream benefit allocation."],
+      auditTimelineRows: []
+    };
+  }
+
+  const hra = calculateHraAllocation(allocation.remainingProgramIIHoursAfter401k, data.hourlyRateAtRetirement, data.avgRetireeRatePreviousCalendarYear);
+  const p1Bank = calculateProgramIInsuranceBank(p1, allocation.programIHoursUsedFor401k);
+  const time = buildCoverageTimeline({ ...derived.timelineCtx, programIHoursBank: p1Bank });
+  const s4 = determineSection4Outputs(time.rows, data);
+  const s5 = determineSection5Outputs(time.rows, data);
+
+  return {
+    ...s4, ...s5,
+    ...allocation,
+    ...hra,
+    remainingProgramIHoursAfter401k: p1Bank,
+    remainingProgramIIHoursAfter401k: allocation.remainingProgramIIHoursAfter401k,
+    equivalentCoverageMonthsEstimate: Math.floor(p1Bank / 8),
+    remainingCoverageMonths: Math.floor(time.remainingHours / 8),
+    coverageMonthsAtRetirement: Math.floor(p1Bank / 8),
+    statePaidPEHPEndDate: time.rows.at(-1)?.rowEndDate || "",
+    auditTimelineRows: time.rows,
+    assumptionsAndWarnings: p3 > 0 ? ["Program III is informational only and does not fund retirement benefits."] : []
+  };
+};
+
+const validateInputs = (data, derived, calcResult) => {
+  const blockers = [];
+  const allDates = [data.lastDayPaid, data.hireDate, data.birthDate, data.spouseBirthDate, data.eePartAEffectiveDate, data.eePartBEffectiveDate, data.spousePartAEffectiveDate, data.spousePartBEffectiveDate].filter(Boolean);
+  if (allDates.some(d => !parseDate(d))) blockers.push("invalid dates");
+  const nonNegFields = ["program1SickHours","program1ConvertedHours","program2SickHours","program2ConvertedHours","program3SickHours","hourlyRateAtRetirement","rateFor401kValuation","avgRetireeRatePreviousCalendarYear"];
+  if (nonNegFields.some(k => num(data[k]) < 0)) blockers.push("negative hours/rates");
+  if (calcResult?.blocking401kCap) blockers.push("401(k) cap issue without override");
+  if (data.calculationMode === "full-sick-leave" && (!num(data.hourlyRateAtRetirement) || !data.lastDayPaid)) blockers.push("full mode selected but required pay/rate inputs missing");
+  if (!bool(data.agencyParticipatesInProgramI) && (num(data.program1SickHours)+num(data.program1ConvertedHours) > 0)) blockers.push("Program I continuation used when agencyParticipatesInProgramI = false");
+  if (data.dependents.some(d => d.approvedDisabledDependent && !d.documentationReviewed)) blockers.push("dependent marked as approved disabled dependent without documentation/review flag");
+
+  if ((data.s5_ee_medPlan || "") && !(derived.eeMed.hasMedicalEligibility || derived.eeMed.medicalDate)) blockers.push("Medicare medical elected without both Part A and B");
+  if ((data.s5_ee_medPharmacy || "") && !(derived.eeMed.hasPharmacyEligibility || derived.eeMed.pharmacyDate)) blockers.push("Medicare pharmacy elected without at least Part A or Part B");
+  if ((data.s5_sp_medPlan || "") && !derived.spMed.medicalDate && data.spouseBirthDate) blockers.push("spouse Medicare plan selected but spouse not eligible");
+  return blockers;
+};
+
+const generateWarnings = (data, derived) => {
+  const warnings = [];
+  const eeTiming = isTimelyEnrollment(data.pehpEnrollmentReceivedDateEmployee, derived.eeMed.medicalDate || derived.coverage.existingCoverageEndDate);
+  const spTiming = isTimelyEnrollment(data.pehpEnrollmentReceivedDateSpouse, derived.spMed.medicalDate || derived.coverage.existingCoverageEndDate);
+  if (!eeTiming.timely || !spTiming.timely) warnings.push("PEHP enrollment timing may cause lapse.");
+  if (eeTiming.assumed || spTiming.assumed) warnings.push("Actual Medicare enrollment receipt date missing; assumed timely.");
+  if (derived.eeMed.medicalIsEstimated || derived.spMed.medicalIsEstimated) warnings.push("Actual Medicare dates missing, age-based estimate used.");
+  if (data.dependents.some(d => !d.approvedDisabledDependent)) warnings.push("Ordinary dependents terminate when employee reaches Medicare.");
+  if (!data.adminConfig.allowLowerLevelPlanAtRetirement && data.adminConfig.useSamePlanOnlyIfLowerLevelUnknown) warnings.push("Same-or-lower plan rule not provable from config, defaulted to same plan only.");
+  if (data.hireDate && parseDate(data.hireDate) <= parseDate(data.adminConfig.employerLegacyExtendedCoverageHireDate)) warnings.push("Employer-specific extension rule is enabled.");
+  if (data.medPlan && !data.adminConfig.earlyRetireePlanCatalog[data.medPlan]) warnings.push("Plan catalog item not found; admin review required.");
+  return warnings;
+};
+
+const summarizeResults = (data) => {
+  const ac = data.adminConfig || DEFAULT_ADMIN_CONFIG;
+  const coverage = calculateCoverageEndDates(data, ac);
+  const retirementDate = coverage.retirementDate;
+  const eeBirth = parseDate(data.birthDate);
+  const spBirth = parseDate(data.spouseBirthDate);
+  const ee65 = eeBirth ? new Date(eeBirth.getFullYear()+65, eeBirth.getMonth(), eeBirth.getDate()) : null;
+  const sp65 = spBirth ? new Date(spBirth.getFullYear()+65, spBirth.getMonth(), spBirth.getDate()) : null;
+  const eeAgeMed = calculateAge65EligibilityDate(eeBirth);
+  const spAgeMed = calculateAge65EligibilityDate(spBirth);
+
+  const eeMed = medicareEligibility({ hasA: bool(data.eeHasMedicarePartA), partA: data.eePartAEffectiveDate, hasB: bool(data.eeHasMedicarePartB), partB: data.eePartBEffectiveDate }, eeBirth, eeAgeMed);
+  const spMed = medicareEligibility({ hasA: bool(data.spouseHasMedicarePartA), partA: data.spousePartAEffectiveDate, hasB: bool(data.spouseHasMedicarePartB), partB: data.spousePartBEffectiveDate }, spBirth, spAgeMed);
+
+  const coverageStart = addDays(coverage.existingCoverageEndDate || coverage.planEndDate || retirementDate || new Date(), 1);
+  const timelineCtx = {
+    coverageStart,
+    eeMedicalDate: eeMed.medicalDate || eeAgeMed || addMonths(coverageStart, 600),
+    spMedicalDate: spMed.medicalDate || spAgeMed || addMonths(coverageStart, 600),
+    eeMedStart: eeMed.medicalDate || eeAgeMed || addMonths(coverageStart, 600),
+    eePharmStart: eeMed.pharmacyDate || eeAgeMed || addMonths(coverageStart, 600),
+    spMedStart: spMed.medicalDate || spAgeMed || addMonths(coverageStart, 600),
+    spPharmStart: spMed.pharmacyDate || spAgeMed || addMonths(coverageStart, 600),
+    eeCanMedical: bool(data.eeHasMedicarePartA) && bool(data.eeHasMedicarePartB) || !!eeAgeMed,
+    eeCanPharmacy: bool(data.eeHasMedicarePartA) || bool(data.eeHasMedicarePartB) || !!eeAgeMed,
+    spCanMedical: bool(data.spouseHasMedicarePartA) && bool(data.spouseHasMedicarePartB) || !!spAgeMed,
+    spCanPharmacy: bool(data.spouseHasMedicarePartA) || bool(data.spouseHasMedicarePartB) || !!spAgeMed,
+    hasSpouse: !!data.spouseBirthDate || !!data.spouseName,
+    hasOrdinaryDependents: data.dependents.some(d => !d.approvedDisabledDependent),
+    hasDisabledDependent: data.dependents.some(d => d.approvedDisabledDependent),
+    s4Plan: data.medPlan,
+    s5Plan: data.s5_ee_medPlan || "Plan 100",
+    pharmacyPlan: data.s5_ee_medPharmacy || "Enhanced",
+    declineCoverage: bool(data.declineCoverage),
+    agencyParticipatesInProgramI: bool(data.agencyParticipatesInProgramI)
+  };
+
+  const derived = { coverage, eeMed, spMed, timelineCtx };
+  const calcResult = data.calculationMode === "full-sick-leave" ? allocateFullSickLeave(data, derived) : allocateManualMonths(data, derived);
+  const blockers = validateInputs(data, derived, calcResult);
+  const warnings = [...(calcResult.assumptionsAndWarnings||[]), ...generateWarnings(data, derived)];
+
+  return {
+    ...calcResult,
+    retirementDate: formatDate(retirementDate),
+    ppEndDate: formatDate(coverage.ppEndDate),
+    planEndDate: formatDate(coverage.planEndDate),
+    existingCoverageEndDate: formatDate(coverage.existingCoverageEndDate),
+    extendedCoverageEndDate: formatDate(coverage.extendedCoverageEndDate),
+    ee65thBirthday: formatDate(ee65),
+    spouse65thBirthday: formatDate(sp65),
+    eeMedicareEligibleDate: formatDate(eeMed.medicalDate || eeAgeMed),
+    spouseMedicareEligibleDate: formatDate(spMed.medicalDate || spAgeMed),
+    employeeAgeRetirement: eeBirth && retirementDate ? calculateAge(eeBirth, retirementDate) : "",
+    spouseAgeRetirement: spBirth && retirementDate ? calculateAge(spBirth, retirementDate) : "",
+    monthsToEEMedicare: retirementDate && (eeMed.medicalDate||eeAgeMed) ? Math.max(0, monthDiffFloor(retirementDate, eeMed.medicalDate||eeAgeMed)) : "",
+    monthsToSpouseMedicare: retirementDate && (spMed.medicalDate||spAgeMed) ? Math.max(0, monthDiffFloor(retirementDate, spMed.medicalDate||spAgeMed)) : "",
+    assumptionsAndWarnings: warnings,
+    blockFinalSummary: blockers.length > 0,
+    blockingReasons: blockers,
+    agencyParticipatesInProgramI: bool(data.agencyParticipatesInProgramI)
+  };
+};
+
+// -------------------------------
+// Utilities / persistence / csv
+// -------------------------------
+const num = (v) => v === "" || v === null || v === undefined ? 0 : Number(v);
+const bool = (v) => v === true || v === "true" || v === 1 || v === "1";
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const mergeDefaults = (input) => {
+  const merged = { ...clone(BASE_DATA), ...input };
+  merged.adminConfig = { ...clone(DEFAULT_ADMIN_CONFIG), ...(input?.adminConfig || {}) };
+  merged.dependents = Array.isArray(input?.dependents) ? input.dependents.map(d => ({ name:"", relationship:"", birthDate:"", approvedDisabledDependent:false, documentationReviewed:false, ...d })) : [];
+  if (!merged.rateFor401kValuation) merged.rateFor401kValuation = merged.hourlyRateAtRetirement || "";
+  return merged;
+};
+
+function App() {
+  const [data, setData] = useState(() => {
+    try {
+      const raw = document.getElementById("persisted-data")?.textContent?.trim();
+      return raw ? mergeDefaults(JSON.parse(raw)) : mergeDefaults({});
+    } catch { return mergeDefaults({}); }
+  });
+  const [view, setView] = useState("entry");
+  const [csvRows, setCsvRows] = useState([]);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showTests, setShowTests] = useState(false);
+  const [testResults, setTestResults] = useState([]);
+
+  const computed = useMemo(() => summarizeResults(data), [data]);
+  const merged = { ...data, ...computed };
+
+  useEffect(() => {
+    document.getElementById("persisted-data").textContent = JSON.stringify(data);
+  }, [data]);
+
+  const patch = (k, v) => setData(prev => mergeDefaults({ ...prev, [k]: v }));
+  const addDependent = () => patch("dependents", [...data.dependents, { name:"", relationship:"", birthDate:"", approvedDisabledDependent:false, documentationReviewed:false }]);
+
+  const saveDraftInPage = () => {
+    document.getElementById("persisted-data").textContent = JSON.stringify(data);
+    alert("Draft saved in page memory.");
+  };
+
+  const saveAsHtml = () => {
+    const cloneDoc = document.documentElement.outerHTML.replace(/<script id="persisted-data" type="application\/json">[\s\S]*?<\/script>/, `<script id="persisted-data" type="application/json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`);
+    const blob = new Blob([cloneDoc], { type:"text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `retirement-worksheet-${(data.employeeName||"draft").replace(/\s+/g,'_')}.html`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const loadDraftFile = (file) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const text = String(r.result || "");
+      const m = text.match(/<script id="persisted-data" type="application\/json">([\s\S]*?)<\/script>/);
+      if (!m) return alert("No embedded draft JSON found.");
+      try { setData(mergeDefaults(JSON.parse(m[1]||"{}"))); }
+      catch { alert("Draft data was invalid JSON."); }
+    };
+    r.readAsText(file);
+  };
+
+  const loadCsv = (file) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const lines = String(r.result || "").trim().split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) return;
+      const headers = lines[0].split(",").map(s => s.trim());
+      const rows = lines.slice(1).map(line => {
+        const cols = line.split(",");
+        const obj = {};
+        headers.forEach((h,i)=>obj[h]=cols[i]?.trim()||"");
+        return obj;
+      });
+      setCsvRows(rows);
+    };
+    r.readAsText(file);
+  };
+
+  const applyEmployeeRow = (row) => {
+    const mapped = {
+      personnelNumber: row.personnelNumber || row.PersonnelNumber || "",
+      employeeName: row.employeeName || row.EmployeeName || "",
+      empSSN: row.empSSN || row.SSN || "",
+      medPlan: row.medPlan || row.MedPlan || data.medPlan,
+      medCoverage: normalizeTier(row.medCoverage || row.MedCoverage || data.medCoverage),
+      birthDate: row.birthDate || row.BirthDate || data.birthDate,
+      spouseBirthDate: row.spouseBirthDate || row.SpouseBirthDate || data.spouseBirthDate,
+      hireDate: row.hireDate || row.HireDate || data.hireDate,
+      lastDayPaid: row.lastDayPaid || row.LastDayPaid || data.lastDayPaid
+    };
+    setData(prev => mergeDefaults({ ...prev, ...mapped }));
+  };
+
+  const runTests = () => {
+    const tests = [];
+    const t = (name, fn) => { try { fn(); tests.push({ name, pass:true }); } catch(e){ tests.push({ name, pass:false, msg:e.message }); } };
+    const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
+
+    t("1 manual mode basic", () => {
+      const d = mergeDefaults({ calculationMode:"manual-months", manualCoverageMonthsInput:12, lastDayPaid:"2026-05-15", birthDate:"1970-06-20", spouseBirthDate:"1972-08-15" });
+      const r = summarizeResults(d); expect(r.s4_ee_monthsUsed >= 1, "Expected Section 4 months");
+    });
+    t("2 ee medicare before spouse burn 16", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1961-06-10", spouseBirthDate:"1964-09-10", program1SickHours:800, hourlyRateAtRetirement:30, annual401kLimit:69000, currentYear401kContributionsEmployee:0, currentYear401kContributionsEmployer:0 });
+      const r = summarizeResults(d); expect(r.auditTimelineRows.some(x => x.programIHoursBurnedThisMonth===16), "Expected 16 hour overlap month");
+    });
+    t("3 both already medicare eligible", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1950-01-10", spouseBirthDate:"1951-02-10", program1SickHours:160, hourlyRateAtRetirement:20, annual401kLimit:69000 });
+      const r = summarizeResults(d); expect((r.s4_ee_monthsUsed||0)===0, "Section 4 should be zero");
+    });
+    t("4 program II only", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1968-02-02", program2SickHours:400, hourlyRateAtRetirement:25, annual401kLimit:69000 });
+      const r = summarizeResults(d); expect(r.hraDepositAmount > 0, "HRA should compute"); expect((r.s4_ee_monthsUsed||0)===0, "No section4");
+    });
+    t("5 program III only warning", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1968-02-02", program3SickHours:100, hourlyRateAtRetirement:25, annual401kLimit:69000 });
+      const r = summarizeResults(d); expect(r.assumptionsAndWarnings.join(" ").includes("Program III"), "program III warning");
+    });
+    t("6 mixed p1/p2 converted", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1968-02-02", program1SickHours:100, program1ConvertedHours:100, program2SickHours:100, program2ConvertedHours:100, hourlyRateAtRetirement:20, annual401kLimit:69000 });
+      const r = summarizeResults(d); expect(r.programIIValueUsedFor401k >= r.programIValueUsedFor401k, "Program II first");
+    });
+    t("7 401k cap binds blocks", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1968-02-02", program1SickHours:1000, hourlyRateAtRetirement:40, annual401kLimit:1000, currentYear401kContributionsEmployee:900, currentYear401kContributionsEmployer:0 });
+      const r = summarizeResults(d); expect(r.blockFinalSummary, "Should block");
+    });
+    t("8 early medicare disability", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1975-01-01", eeHasMedicarePartA:true, eePartAEffectiveDate:"2026-06-01", eeHasMedicarePartB:true, eePartBEffectiveDate:"2026-06-01", program1SickHours:200, hourlyRateAtRetirement:30, annual401kLimit:69000 });
+      const r = summarizeResults(d); expect(r.s5_ee_beginDate >= "2026-06-01", "uses actual early date");
+    });
+    t("9 pharmacy-only", () => {
+      const d = mergeDefaults({ calculationMode:"full-sick-leave", lastDayPaid:"2026-05-15", birthDate:"1970-01-01", eeHasMedicarePartA:true, eePartAEffectiveDate:"2026-07-01", program1SickHours:200, hourlyRateAtRetirement:30, annual401kLimit:69000, s5_ee_medPlan:"", s5_ee_medPharmacy:"Enhanced" });
+      const r = summarizeResults(d); expect(!r.blockingReasons?.includes("Medicare pharmacy elected without at least Part A or Part B"), "pharmacy allowed");
+    });
+    t("10 dependent termination note", () => {
+      const d = mergeDefaults({ calculationMode:"manual-months", manualCoverageMonthsInput:6, lastDayPaid:"2026-05-15", birthDate:"1960-05-01", dependents:[{name:"Kid",approvedDisabledDependent:false}] });
+      const r = summarizeResults(d); expect(r.assumptionsAndWarnings.join(" ").includes("Ordinary dependents"), "dependent note");
+    });
+    t("11 legacy extension on", () => {
+      const d = mergeDefaults({ lastDayPaid:"2026-05-15", hireDate:"2000-01-01", birthDate:"1970-01-01" });
+      const r = summarizeResults(d); expect(r.assumptionsAndWarnings.join(" ").includes("extension rule"), "extension warning");
+    });
+    t("12 legacy extension off", () => {
+      const d = mergeDefaults({ lastDayPaid:"2026-05-15", hireDate:"2005-01-01", birthDate:"1970-01-01" });
+      const r = summarizeResults(d); expect(!r.assumptionsAndWarnings.join(" ").includes("extension rule"), "no extension warning");
+    });
+    t("13 same-plan-only rule", () => {
+      const d = mergeDefaults({ medPlan:"Unknown" });
+      const r = summarizeResults(d); expect(r.assumptionsAndWarnings.join(" ").includes("same plan only") || r.assumptionsAndWarnings.join(" ").includes("Same-or-lower"), "plan rule note");
+    });
+    t("14 summary renders spouse absent", () => {
+      const d = mergeDefaults({ lastDayPaid:"2026-05-15", birthDate:"1970-01-01", spouseBirthDate:"" });
+      const r = summarizeResults(d); expect(typeof r.s5_sp_monthsUsed !== "undefined", "spouse outputs exist");
+    });
+    t("15 backward compatibility old draft", () => {
+      const old = { employeeName:"A", lastDayPaid:"2026-01-15", birthDate:"1970-01-01" };
+      const mergedOld = mergeDefaults(old); expect(mergedOld.calculationMode, "new fields backfilled");
+    });
+
+    setTestResults(tests);
+  };
+
+  const sectionCard = (title, children) => (
+    <section className="bg-white rounded-xl shadow p-4 mb-4 print-card">
+      <h3 className="font-bold text-sm uppercase tracking-wide text-slate-700 border-b pb-2 mb-3">{title}</h3>
+      {children}
+    </section>
+  );
+
+  const input = (k, label, type="text") => (
+    <label className="block">
+      <span className="text-xs font-semibold text-slate-600">{label}</span>
+      <input className="mt-1 w-full border rounded px-2 py-1 text-sm" type={type} value={data[k] ?? ""} onChange={e=>patch(k, type==="checkbox" ? e.target.checked : e.target.value)} checked={type==="checkbox" ? bool(data[k]) : undefined} />
+    </label>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto p-4">
+      <header className="bg-white rounded-xl shadow p-4 mb-4 no-print">
+        <div className="flex flex-wrap justify-between gap-2 items-center">
+          <h1 className="text-xl font-bold">Retirement Worksheet Calculator</h1>
+          <div className="flex gap-2">
+            <button className="px-3 py-1 rounded bg-slate-700 text-white" onClick={()=>setView(view==="entry"?"summary":"entry")}>{view==="entry"?"Summary / Print":"Back to Entry"}</button>
+            <button className="px-3 py-1 rounded bg-blue-700 text-white" onClick={saveDraftInPage}>Save Draft</button>
+            <button className="px-3 py-1 rounded bg-indigo-700 text-white" onClick={saveAsHtml}>Save As</button>
+            <button className="px-3 py-1 rounded bg-emerald-700 text-white" onClick={()=>window.print()}>Print</button>
+          </div>
+        </div>
+      </header>
+
+      {view === "entry" ? (
+        <>
+          {sectionCard("Mode", <div className="grid md:grid-cols-2 gap-3">
+            <label className="text-sm"><input type="radio" checked={data.calculationMode==="manual-months"} onChange={()=>patch("calculationMode","manual-months")} /> Manual Coverage Months</label>
+            <label className="text-sm"><input type="radio" checked={data.calculationMode==="full-sick-leave"} onChange={()=>patch("calculationMode","full-sick-leave")} /> Full Sick Leave Calculation</label>
+          </div>)}
+
+          {sectionCard("Section 1 - Employee Information", <div className="grid md:grid-cols-4 gap-3">
+            {input("personnelNumber","Personnel Number")}
+            {input("employeeName","Employee Name")}
+            {input("empSSN","Employee SSN")}
+            {input("eeGroup","Group")}
+            {input("lastDayPaid","Last Day Paid","date")}
+            {input("retirementDate","Retirement Date (override)","date")}
+            {input("hireDate","Hire Date","date")}
+            {input("birthDate","Employee Birth Date","date")}
+            {input("payRate","Pay Rate")}
+            {input("medPlan","Active Medical Plan")}
+            <label><span className="text-xs font-semibold text-slate-600">Coverage Tier</span><select className="mt-1 w-full border rounded px-2 py-1 text-sm" value={data.medCoverage} onChange={e=>patch("medCoverage",normalizeTier(e.target.value))}><option>Single</option><option>Double</option><option>Family</option><option>Self</option><option>Self &amp; Dependent</option><option>Self + Family</option></select></label>
+            {input("deptUnit","Dept Unit")}
+            {input("deptName","Dept Name")}
+            {input("declineCoverage","Decline Coverage","checkbox")}
+            {input("isDeathBenefit","Death Benefit/Transfer Scenario","checkbox")}
+          </div>)}
+
+          {sectionCard("Section 2 - Criteria for Continuation", <div className="grid md:grid-cols-4 gap-3">
+            {input("coverageMonthsAtRetirement","Coverage Months at Retirement (legacy)","number")}
+            {input("manualCoverageMonthsInput","Manual Coverage Months Input","number")}
+            {input("agencyParticipatesInProgramI","Agency Participates in Program I","checkbox")}
+            {input("hourlyRateAtRetirement","Hourly Rate at Retirement","number")}
+            {input("rateFor401kValuation","Rate for 401(k) Valuation","number")}
+            {input("avgRetireeRatePreviousCalendarYear","Avg Retiree Rate Previous Year","number")}
+            {input("annual401kLimit","Annual 401(k) Limit","number")}
+            {input("currentYear401kContributionsEmployee","Current Year 401(k) EE","number")}
+            {input("currentYear401kContributionsEmployer","Current Year 401(k) ER","number")}
+            {input("remaining401kRoomOverride","Remaining 401(k) Room Override","number")}
+            {input("final401kContributionAmountOverride","Final 401(k) Contribution Override","number")}
+          </div>)}
+
+          {sectionCard("Dependents", <div>
+            <button className="px-2 py-1 bg-slate-700 text-white rounded text-sm mb-3" onClick={addDependent}>Add Dependent</button>
+            <div className="space-y-2">
+              {data.dependents.map((d, i)=><div key={i} className="grid md:grid-cols-6 gap-2 border rounded p-2">
+                <input className="border rounded px-2 py-1 text-sm" placeholder="Name" value={d.name||""} onChange={e=>{
+                  const list=[...data.dependents]; list[i]={...list[i], name:e.target.value}; patch("dependents", list);
+                }}/>
+                <input className="border rounded px-2 py-1 text-sm" placeholder="Relationship" value={d.relationship||""} onChange={e=>{ const list=[...data.dependents]; list[i]={...list[i], relationship:e.target.value}; patch("dependents", list); }}/>
+                <input className="border rounded px-2 py-1 text-sm" type="date" value={d.birthDate||""} onChange={e=>{ const list=[...data.dependents]; list[i]={...list[i], birthDate:e.target.value}; patch("dependents", list); }}/>
+                <label className="text-xs"><input type="checkbox" checked={!!d.approvedDisabledDependent} onChange={e=>{ const list=[...data.dependents]; list[i]={...list[i], approvedDisabledDependent:e.target.checked}; patch("dependents", list); }}/> Approved Disabled</label>
+                <label className="text-xs"><input type="checkbox" checked={!!d.documentationReviewed} onChange={e=>{ const list=[...data.dependents]; list[i]={...list[i], documentationReviewed:e.target.checked}; patch("dependents", list); }}/> Documentation Reviewed</label>
+                <button className="text-red-700 text-sm" onClick={()=>{ const list=[...data.dependents]; list.splice(i,1); patch("dependents", list); }}>Remove</button>
+              </div>)}
+            </div>
+          </div>)}
+
+          {sectionCard("Section 3 - Life Insurance", <div className="text-sm text-slate-700">Program I pre-Medicare months include minimum authorized life insurance per policy.</div>)}
+
+          {sectionCard("Section 4 - Health Insurance Continuation", <div className="grid md:grid-cols-4 gap-3">
+            {input("s4_ee_medPlan","Section 4 EE Plan")}
+            {input("s4_ee_medCoverage","Section 4 EE Coverage")}
+            {input("s4_sp_medPlan","Section 4 SP Plan")}
+            {input("s4_sp_medCoverage","Section 4 SP Coverage")}
+          </div>)}
+
+          {sectionCard("Section 5 - Medicare Supplement", <div className="grid md:grid-cols-4 gap-3">
+            {input("s5_ee_medPlan","Section 5 EE Med Plan")}
+            {input("s5_ee_medPharmacy","Section 5 EE Pharmacy")}
+            {input("s5_sp_medPlan","Section 5 SP Med Plan")}
+            {input("s5_sp_medPharmacy","Section 5 SP Pharmacy")}
+            {input("eeHasMedicarePartA","EE Has Part A","checkbox")}
+            {input("eePartAEffectiveDate","EE Part A Effective","date")}
+            {input("eeHasMedicarePartB","EE Has Part B","checkbox")}
+            {input("eePartBEffectiveDate","EE Part B Effective","date")}
+            {input("spouseHasMedicarePartA","SP Has Part A","checkbox")}
+            {input("spousePartAEffectiveDate","SP Part A Effective","date")}
+            {input("spouseHasMedicarePartB","SP Has Part B","checkbox")}
+            {input("spousePartBEffectiveDate","SP Part B Effective","date")}
+            {input("pehpEnrollmentReceivedDateEmployee","PEHP Received EE","date")}
+            {input("pehpEnrollmentReceivedDateSpouse","PEHP Received SP","date")}
+          </div>)}
+
+          {data.calculationMode === "full-sick-leave" && sectionCard("Calculation Inputs (Full Mode)", <div className="grid md:grid-cols-4 gap-3">
+            {input("program1SickHours","Program I Sick Hours","number")}
+            {input("program1ConvertedHours","Program I Converted Hours","number")}
+            {input("program2SickHours","Program II Sick Hours","number")}
+            {input("program2ConvertedHours","Program II Converted Hours","number")}
+            {input("program3SickHours","Program III Sick Hours","number")}
+            {input("spouseName","Spouse Name")}
+            {input("spouseFirstName","Spouse First")}
+            {input("spouseLastName","Spouse Last")}
+            {input("spouseBirthDate","Spouse Birth Date","date")}
+            {input("spouseSSN","Spouse SSN")}
+          </div>)}
+
+          {sectionCard("Calculation Audit", <div>
+            <div className="grid md:grid-cols-4 gap-2 text-sm mb-3">
+              <div><b>Program I Start:</b> {num(data.program1SickHours)+num(data.program1ConvertedHours)}</div>
+              <div><b>Program II Start:</b> {num(data.program2SickHours)+num(data.program2ConvertedHours)}</div>
+              <div><b>Program III Info:</b> {num(data.program3SickHours)}</div>
+              <div><b>401(k) Final:</b> {merged.final401kContributionAmount || 0}</div>
+              <div><b>P2 for 401(k):</b> {merged.programIIHoursUsedFor401k || 0}h / ${merged.programIIValueUsedFor401k || 0}</div>
+              <div><b>P1 for 401(k):</b> {merged.programIHoursUsedFor401k || 0}h / ${merged.programIValueUsedFor401k || 0}</div>
+              <div><b>HRA Rate:</b> {merged.hraValuationRateUsed || 0}</div>
+              <div><b>HRA Deposit:</b> {merged.hraDepositAmount || 0}</div>
+              <div><b>Remaining P1:</b> {merged.remainingProgramIHoursAfter401k || 0}</div>
+            </div>
+            <div className="overflow-auto border rounded max-h-72">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-200 sticky top-0"><tr><th>Start</th><th>End</th><th>EE</th><th>SP</th><th>Dep</th><th>Burn</th><th>Plans</th><th>Notes</th></tr></thead>
+                <tbody>{(merged.auditTimelineRows||[]).map((r,i)=><tr key={i} className="border-t"><td>{r.rowStartDate}</td><td>{r.rowEndDate}</td><td>{r.employeeCoverageType}</td><td>{r.spouseCoverageType}</td><td>{r.dependentCoverageType}</td><td>{r.programIHoursBurnedThisMonth}</td><td>{r.plansUsed}</td><td>{r.notes}</td></tr>)}</tbody>
+              </table>
+            </div>
+            <ul className="mt-3 list-disc ml-5 text-amber-700 text-sm">{(merged.assumptionsAndWarnings||[]).map((w,i)=><li key={i}>{w}</li>)}</ul>
+            {merged.blockFinalSummary && <div className="mt-3 p-2 bg-red-100 text-red-800 rounded text-sm"><b>Blocking issues:</b> {(merged.blockingReasons||[]).join("; ")}</div>}
+          </div>)}
+
+          {sectionCard("CSV Employee Lookup / Draft Load", <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="cursor-pointer px-2 py-1 bg-slate-700 text-white rounded">Load CSV <input className="hidden" type="file" accept=".csv,text/csv" onChange={e=>e.target.files?.[0] && loadCsv(e.target.files[0])} /></label>
+              <label className="cursor-pointer px-2 py-1 bg-indigo-700 text-white rounded">Load Saved HTML Draft <input className="hidden" type="file" accept=".html,text/html" onChange={e=>e.target.files?.[0] && loadDraftFile(e.target.files[0])} /></label>
+            </div>
+            {csvRows.length > 0 && <div className="max-h-60 overflow-auto border rounded"><table className="w-full text-xs"><thead><tr className="bg-slate-200"><th>Select</th>{Object.keys(csvRows[0]).map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{csvRows.map((r,i)=><tr key={i} className="border-t"><td><button className="text-blue-700" onClick={()=>applyEmployeeRow(r)}>Use</button></td>{Object.keys(csvRows[0]).map(h=><td key={h}>{r[h]}</td>)}</tr>)}</tbody></table></div>}
+          </div>)}
+
+          {sectionCard("Admin Config", <div>
+            <button className="mb-2 px-2 py-1 border rounded text-sm" onClick={()=>setShowAdmin(!showAdmin)}>{showAdmin?"Hide":"Show"} Admin JSON</button>
+            {showAdmin && <textarea className="w-full h-64 border rounded p-2 text-xs font-mono" value={JSON.stringify(data.adminConfig, null, 2)} onChange={e=>{ try { patch("adminConfig", JSON.parse(e.target.value)); } catch {} }} />}
+          </div>)}
+
+          {sectionCard("Developer Test Harness", <div>
+            <button className="mb-2 px-2 py-1 border rounded text-sm" onClick={()=>setShowTests(!showTests)}>{showTests?"Hide":"Show"} Tests</button>
+            {showTests && <div><button className="px-2 py-1 bg-emerald-700 text-white rounded text-sm" onClick={runTests}>Run Pure-Function Tests</button>
+              <ul className="mt-2 text-sm">{testResults.map((r,i)=><li key={i} className={r.pass?"text-emerald-700":"text-red-700"}>{r.pass?"PASS":"FAIL"} - {r.name}{r.msg?`: ${r.msg}`:""}</li>)}</ul></div>}
+          </div>)}
+        </>
+      ) : (
+        <div className="bg-white rounded-xl shadow p-5 print-card">
+          <h2 className="text-lg font-bold mb-3">Retirement Worksheet Summary</h2>
+          {merged.blockFinalSummary && <div className="mb-3 p-2 bg-red-100 text-red-800 rounded text-sm"><b>Summary blocked:</b> {(merged.blockingReasons||[]).join("; ")}</div>}
+          <div className="grid md:grid-cols-3 gap-3 text-sm">
+            <div><b>Employee:</b> {merged.employeeName || "-"}</div><div><b>Personnel #:</b> {merged.personnelNumber || "-"}</div><div><b>Retirement Date:</b> {merged.retirementDate || "-"}</div>
+            <div><b>Spouse:</b> {merged.spouseName || [merged.spouseFirstName,merged.spouseLastName].filter(Boolean).join(" ") || "-"}</div><div><b>EE Age at Retirement:</b> {merged.employeeAgeRetirement || "-"}</div><div><b>SP Age at Retirement:</b> {merged.spouseAgeRetirement || "-"}</div>
+            <div><b>Coverage End Date:</b> {merged.existingCoverageEndDate || "-"}</div><div><b>Extended Coverage End:</b> {merged.extendedCoverageEndDate || "-"}</div><div><b>State Paid PEHP End:</b> {merged.statePaidPEHPEndDate || "-"}</div>
+          </div>
+
+          <h3 className="font-bold mt-4">Section 4</h3>
+          <div className="grid md:grid-cols-4 gap-2 text-sm">
+            <div>EE Months: {merged.s4_ee_monthsUsed || 0}</div><div>EE Begin: {merged.s4_ee_beginDate || "-"}</div><div>EE End: {merged.s4_ee_endDate || "-"}</div><div>EE Plan/Coverage: {merged.s4_ee_medPlan || "-"} / {merged.s4_ee_medCoverage || "-"}</div>
+            <div>SP Months: {merged.s4_sp_monthsUsed || 0}</div><div>SP Begin: {merged.s4_sp_beginDate || "-"}</div><div>SP End: {merged.s4_sp_endDate || "-"}</div><div>SP Plan/Coverage: {merged.s4_sp_medPlan || "-"} / {merged.s4_sp_medCoverage || "-"}</div>
+          </div>
+
+          <h3 className="font-bold mt-4">Section 5</h3>
+          <div className="grid md:grid-cols-4 gap-2 text-sm">
+            <div>EE Months: {merged.s5_ee_monthsUsed || 0}</div><div>EE Begin: {merged.s5_ee_beginDate || "-"}</div><div>EE End: {merged.s5_ee_endDate || "-"}</div><div>EE Plan/Pharm: {merged.s5_ee_medPlan || "-"} / {merged.s5_ee_medPharmacy || "-"}</div>
+            <div>SP Months: {merged.s5_sp_monthsUsed || 0}</div><div>SP Begin: {merged.s5_sp_beginDate || "-"}</div><div>SP End: {merged.s5_sp_endDate || "-"}</div><div>SP Plan/Pharm: {merged.s5_sp_medPlan || "-"} / {merged.s5_sp_medPharmacy || "-"}</div>
+          </div>
+
+          <h3 className="font-bold mt-4">Full-Mode Derived Values</h3>
+          <div className="grid md:grid-cols-3 gap-2 text-sm">
+            <div>Final 401(k) Contribution: {merged.final401kContributionAmount || 0}</div>
+            <div>HRA Deposit Amount: {merged.hraDepositAmount || 0}</div>
+            <div>Remaining Program I Hours After 401(k): {merged.remainingProgramIHoursAfter401k || 0}</div>
+            <div>Equivalent Coverage Months Estimate: {merged.equivalentCoverageMonthsEstimate || 0}</div>
+            <div>Remaining Coverage Months: {merged.remainingCoverageMonths || 0}</div>
+            <div>Survivor/Transfer Scenario: {bool(merged.isDeathBenefit)?"Yes":"No"}</div>
+          </div>
+
+          <h3 className="font-bold mt-4">Dependents</h3>
+          <ul className="text-sm list-disc ml-5">{(merged.dependents||[]).map((d,i)=><li key={i}>{d.name || "(unnamed)"} - {d.relationship || ""} {d.approvedDisabledDependent?"(Approved Disabled)":""}</li>)}</ul>
+
+          <h3 className="font-bold mt-4">Assumptions / Warnings</h3>
+          <ul className="text-sm list-disc ml-5 text-amber-700">{(merged.assumptionsAndWarnings||[]).map((w,i)=><li key={i}>{w}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
