@@ -529,14 +529,7 @@ function App() {
   };
 
   const saveAsHtml = () => {
-    const persisted = JSON.stringify(data).replace(/</g, "\\u003c");
-    const scriptOpen = '<script id="persisted-data" type="application/json">';
-    const scriptClose = '<' + '/script>';
-    const replacement = scriptOpen + persisted + scriptClose;
-    const cloneDoc = document.documentElement.outerHTML.replace(
-      /<script id="persisted-data" type="application\/json">[\s\S]*?<\/script>/,
-      replacement
-    );
+    const cloneDoc = document.documentElement.outerHTML.replace(/<script id="persisted-data" type="application\/json">[\s\S]*?<\/script>/, `<script id="persisted-data" type="application/json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`);
     const blob = new Blob([cloneDoc], { type:"text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
