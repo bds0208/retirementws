@@ -690,6 +690,10 @@
         alert('Draft saved in embedded JSON. Use Save As to export HTML.');
       };
       const saveAs = () => {
+        const openTag = '<script id="persisted-data" type="application/json">';
+        const closeTag = '<\\/script>';
+        const persistedPayload = `${openTag}${JSON.stringify(form)}${closeTag}`;
+        const html = document.documentElement.outerHTML.replace(`${openTag}${closeTag}`, persistedPayload);
         const html = document.documentElement.outerHTML.replace('<script id="persisted-data" type="application/json"></script>', `<script id="persisted-data" type="application/json">${JSON.stringify(form)}</script>`);
         const blob = new Blob([html], { type: 'text/html' });
         const a = document.createElement('a');
